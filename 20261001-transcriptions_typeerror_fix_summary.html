@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fix summary: TypeError: can only join an iterable</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #1b1f23; line-height: 1.55; }
+  h1 { font-size: 1.4rem; border-bottom: 1px solid #e1e4e8; padding-bottom: 8px; }
+  h2 { font-size: 1.05rem; margin-top: 28px; }
+  code, pre { font-family: SFMono-Regular, Consolas, Menlo, monospace; font-size: 0.88em; }
+  pre { background: #f6f8fa; padding: 12px 14px; border-radius: 6px; overflow-x: auto; }
+  .path { color: #6a737d; }
+  .tag { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .tag.cause { background: #ffeef0; color: #b31d28; }
+  .tag.fix { background: #e6ffed; color: #22863a; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  td, th { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eaecef; font-size: 0.92rem; }
+</style>
+</head>
+<body>
+
+<h1>Scribe prod error: <code>TypeError: can only join an iterable</code></h1>
+<p>Cloud Run service <code>scribe-prod</code>, route <code>POST /generate_workflow_task_output</code>, 2026-10-01 14:36:59 UTC.</p>
+
+<h2><span class="tag cause">Root cause</span></h2>
+<p>
+<code>GenerateWorkflowTaskOutput.transcriptions</code> is declared
+<code>Optional[list[str]] = None</code>
+(<span class="path">errands/jobs/openai/schemas.py</span>).
+For a request that supplies <code>documents</code> but no transcript
+(no <code>transcriptions</code>, no <code>diarized_transcriptions</code>, <code>is_pre_chart=False</code>),
+the controller's 422 validation does not reject it, so <code>None</code> reaches
+<code>macro_llm_call</code>, which does:
+</p>
+<pre>"transcription": " ".join(transcriptions) + ...</pre>
+<p><code>" ".join(None)</code> raises the <code>TypeError</code>.</p>
+
+<h2>Call path</h2>
+<pre>generate_workflow_task_output (controllers.py:~3571)
+  → get_selected_macros (services.py:1534)
+    → select_and_fill_macros (services.py:660)   # transcriptions param, no None-guard
+      → macro_llm_call (services.py:860)          # " ".join(transcriptions) crashes</pre>
+
+<h2><span class="tag fix">Fix</span></h2>
+<p><span class="path">errands/jobs/macros/services.py</span> — normalize at the top of <code>select_and_fill_macros</code>, which feeds both call sites into <code>macro_llm_call</code>:</p>
+<pre>transcriptions = transcriptions or []</pre>
+<p>Also widened the parameter type hint from <code>List[str]</code> to <code>Optional[List[str]]</code> to match what it actually receives.</p>
+
+<h2>Status</h2>
+<table>
+<tr><th>Item</th><th>State</th></tr>
+<tr><td>Fix applied</td><td>Yes — errands/jobs/macros/services.py</td></tr>
+<tr><td>Syntax check</td><td>Passed (ast.parse)</td></tr>
+<tr><td>Unit tests run</td><td>Not run — sandbox lacks live Postgres connection required by test fixtures</td></tr>
+<tr><td>Commit / PR</td><td>Not created yet</td></tr>
+</table>
+
+</body>
+</html>

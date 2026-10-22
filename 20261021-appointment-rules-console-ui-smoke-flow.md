@@ -2,7 +2,22 @@
 
 Open: **Account → Demos → Appointment rules API** (`scribe_developer`).
 
-All parameters below are for the **staging** account `arthur.fung@commure.com` (scribe account `100000217`, provider `7`, site `4` "Aalok Test 2"). Run a local Normandy backend pointed at the staging DB, since the appointment rules routes are not on staging yet. Check out the branch for the endpoints you test: PR 6 for providers and coverage, PR 7–9 for writes, PR 10 for missing, PR 12–13 for my rules.
+All parameters below are for the **staging** account `arthur.fung@commure.com` (scribe account `100000217`, provider `7`, site `4` "Aalok Test 2"). Run a local Normandy backend pointed at the staging DB, since the appointment rules routes are not on staging yet. Check out the branch for the endpoints you test (see [PRs](#prs)).
+
+### PRs
+
+Status as of 2026-10-22. The open PRs are stacked, so each branch includes the ones above it: #60069 → #60070 → #60355 → #60358 → #60362, and #60070 → #60372 → #60385. To test everything except my rules, check out #60362.
+
+| PR | Endpoints | Sections | Status |
+|---|---|---|---|
+| [#60065](https://github.com/getathelas/normandy/pull/60065) | `GET /admin_panel/appointment_rules` | [List rules](#list-rules) | Merged 2026-10-22 |
+| [#60069](https://github.com/getathelas/normandy/pull/60069) | `GET …/providers`, `GET …/template_coverage` | [Providers](#providers), [Coverage](#coverage) | Open, approved |
+| [#60070](https://github.com/getathelas/normandy/pull/60070) | `POST /admin_panel/appointment_rules` | [Create](#create) | Open, awaiting review |
+| [#60355](https://github.com/getathelas/normandy/pull/60355) | `PATCH …/{template_id}`, `PATCH …/{template_id}/providers` | [Edit](#edit), [Move](#move) | Open, awaiting review |
+| [#60358](https://github.com/getathelas/normandy/pull/60358) | `PUT …/{template_id}/default`, `DELETE …/{template_id}` | [Set default](#set-default), [Delete](#delete), [Cleanup](#cleanup) | Open, awaiting review |
+| [#60362](https://github.com/getathelas/normandy/pull/60362) | `GET …/missing`; `providers_without_template` on create, edit, move, delete | [Missing](#missing) | Open, awaiting review |
+| [#60372](https://github.com/getathelas/normandy/pull/60372) | `GET /v1/scribe/appointment_rules/me` | [My rules](#my-rules) | Open, awaiting review |
+| [#60385](https://github.com/getathelas/normandy/pull/60385) | `PUT /v1/scribe/appointment_rules/me` | [Choose template](#choose-template) | Open, awaiting review |
 
 Set once:
 
@@ -135,7 +150,7 @@ curl -sS -G -w 'HTTP %{http_code}\n' -o "$OUT_DIR/coverage-t63-facility-46.json"
 
 ## Missing
 
-**UI:** optional `facility_id` → **Missing**. Needs PR 10 (`404 "Not Found"` before it). Site-wide: expect 7 providers across the 3 types.
+**UI:** optional `facility_id` → **Missing**. Needs [#60362](https://github.com/getathelas/normandy/pull/60362) (`404 "Not Found"` before it). Site-wide: expect 7 providers across the 3 types.
 
 ```bash
 curl -sS -w 'HTTP %{http_code}\n' -o "$OUT_DIR/missing.json" "${HDR[@]}" \
@@ -225,7 +240,7 @@ curl -sS -X PATCH -w 'HTTP %{http_code}\n' -o "$OUT_DIR/edit-smoke-t503-to-t63.j
   -d '{"new_template_id": 63}'
 ```
 
-Resolve missing (rule unchanged; URL-encode `appointment_type` in query): C A lacks 65, so `PERSONAL_RULES` pins them to their primary template 10195 as a new non-default rule. Expect missing to drop to 0.
+Resolve missing (rule unchanged; URL-encode `appointment_type` in query; `providers_without_template` returns `400` before [#60362](https://github.com/getathelas/normandy/pull/60362)): C A lacks 65, so `PERSONAL_RULES` pins them to their primary template 10195 as a new non-default rule. Expect missing to drop to 0.
 
 ```bash
 curl -sS -X PATCH -w 'HTTP %{http_code}\n' -o "$OUT_DIR/edit-smoke-resolve-missing-t65.json" "${HDR[@]}" \
@@ -267,7 +282,7 @@ curl -sS -X DELETE -w 'HTTP %{http_code}\n' -o "$OUT_DIR/delete-smoke-t10195.jso
   -d '{}'
 ```
 
-Default with other rules: delete 65 and make 63 the default. Without `new_default_template_id` expect `400`. `110485` lacks 63, so `PERSONAL_RULES` pins them to their primary template 1362 (new rule). The other providers without 63 (`109902`, `110505`, `125372`, `125381`) land on 63 and show as missing.
+Default with other rules: delete 65 and make 63 the default. Without `new_default_template_id` expect `400`. The `providers_without_template` field needs [#60362](https://github.com/getathelas/normandy/pull/60362). `110485` lacks 63, so `PERSONAL_RULES` pins them to their primary template 1362 (new rule). The other providers without 63 (`109902`, `110505`, `125372`, `125381`) land on 63 and show as missing.
 
 ```bash
 curl -sS -X DELETE -w 'HTTP %{http_code}\n' -o "$OUT_DIR/delete-smoke-t65-with-new-default.json" "${HDR[@]}" \

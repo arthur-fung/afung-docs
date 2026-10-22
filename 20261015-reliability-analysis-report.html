@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambient reliability metrics: analysis so far (2026-10-15)</title>
+<style>
+  :root { color-scheme: light; }
+  .viz-root {
+    --surface-1: #fcfcfb; --surface-2: #f4f3f0;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --grid: #e6e5e0; --axis: #c9c8c1;
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #9a9992;
+    --goal: #d03b3b; --link: #1c5cab;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) { color-scheme: dark; }
+    :root:where(:not([data-theme="light"])) .viz-root {
+      --surface-1: #1a1a19; --surface-2: #232321;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #9a998f;
+      --grid: #2e2e2b; --axis: #4a4a46;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #6f6e68;
+      --goal: #ec835a; --link: #86b6ef;
+    }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1: #1a1a19; --surface-2: #232321;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #9a998f;
+    --grid: #2e2e2b; --axis: #4a4a46;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #6f6e68;
+    --goal: #ec835a; --link: #86b6ef;
+  }
+  body { margin: 0; background: var(--surface-1); }
+  .viz-root {
+    background: var(--surface-1); color: var(--text-primary);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 920px; margin: 0 auto; padding: 32px 24px 80px;
+  }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 48px 0 6px; padding-top: 8px; border-top: 1px solid var(--grid); }
+  h3 { font-size: 16px; margin: 28px 0 4px; }
+  p { margin: 8px 0; }
+  .sub { color: var(--text-secondary); margin: 0 0 18px; }
+  .note { color: var(--text-muted); font-size: 13px; margin: 4px 0 0; }
+  .box { background: var(--surface-2); border-radius: 8px; padding: 14px 20px; margin: 14px 0; }
+  .box li { margin: 6px 0; }
+  .answer { border-left: 4px solid var(--series-1); }
+  .warn { border-left: 4px solid var(--series-2); }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0 4px; font-size: 13px; color: var(--text-secondary); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .chart { position: relative; }
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  svg text { fill: var(--text-secondary); font-size: 12px; }
+  svg .val { fill: var(--text-primary); font-weight: 600; }
+  svg .inbar { fill: #fff; font-weight: 600; }
+  .tip { position: absolute; pointer-events: none; display: none; z-index: 5; background: var(--surface-2); color: var(--text-primary);
+    border: 1px solid var(--axis); border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 2px 8px rgba(0,0,0,.18); white-space: nowrap; }
+  .tip b { display: block; margin-bottom: 2px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th:first-child, td:first-child { text-align: left; }
+  td.l, th.l { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  code { font-size: 13px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+  a { color: var(--link); }
+  .toggle { float: right; font-size: 12px; background: none; border: 1px solid var(--axis); color: var(--text-secondary); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--surface-2); color: var(--text-secondary); margin-left: 6px; vertical-align: 2px; }
+  nav { font-size: 13px; margin: 8px 0 0; color: var(--text-secondary); }
+  nav a { margin-right: 12px; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="viz-root" id="root">
+  <button class="toggle" id="theme" type="button">Toggle dark / light</button>
+  <h1>Ambient reliability metrics: analysis so far</h1>
+  <p class="sub">Frontend reliability metrics for the Q4 OKR draft. Written 2026-10-15 from the work in this session. Every number below comes from a query, a CSV, a Sentry/Crashlytics page or a code read that is named next to it; inferences are labeled as such.</p>
+  <nav>
+    <a href="#summary">Summary</a><a href="#okr">1 Q4 OKR review</a><a href="#unexpected">2 Unexpected failures</a><a href="#db">3 DB Sentry errors</a>
+    <a href="#goal">4 Q4 goals</a><a href="#recovery">5 Recovery metric</a><a href="#kills">6 App kills</a><a href="#android">7 Android crashes</a><a href="#caveats">8 Caveats and next steps</a>
+  </nav>
+
+  <h2 id="summary" style="margin-top:28px">Summary</h2>
+  <div class="box answer"><ul>
+    <li><b>Unexpected Recording Failures (0.12%, goal 0.01%) is mostly measuring something else.</b> 70% of the failure events in a 4-day sample are "No microphone detected", which the Notion definition calls <i>expected</i> but the SQL counts as unexpected. Excluding them, the rate is about 0.035%.</li>
+    <li><b>The database problem is captured, mostly by Unexpected Failures.</b> "Failed to save/retrieve recording data" is 13% of failure events and Sentry places it in the local cache write path (<code>CacheRepository.insertAudioCache</code>, <code>insertFilePart</code>). Fixing local storage would plausibly cut the rate left after the mic reclassification by about half (0.035% to about 0.018%). My earlier per-user check found no extra scribe loss, but that test was weak (section 3), so effects on lost scribes, stuck-in-cache and audio discrepancy are untested, not ruled out.</li>
+    <li><b>"% of scribes succeeded in uploading or recovered" is not a whole-flow metric.</b> It is a recovery rate for recordings whose local cache was seen <code>paused</code> or <code>error</code>. It does not cover recording start, scribe status, audio completeness or note completion. My earlier recommendation of it as a headline KR was too strong.</li>
+    <li><b>App kills are mostly invisible to the recovery metric (36% of killed recordings), but they rarely lose the whole scribe.</b> Of 709 invisible killed recordings in one day, 683 already had a scribe row and only 26 never got one.</li>
+    <li><b>On Android, two crash groups drive the picture:</b> a flat foreground-service crash (about 16 users a week) and spiky Intune/MAM crashes that began around Sep 14. Neither appears on the latest build (3.42.0), but almost nobody is on it yet.</li>
+    <li><b>The background-kill complaint is real, and it shows up as missing audio, not lost scribes.</b> On Oct 6, about 8% of active mobile kills left a scribe with more than 10 seconds of audio missing (about 46 recordings a day, 0.1% of mobile scribes), 20-30 times the normal rate. It is a slice of Audio Discrepancy that the web-dominated headline hides, and the recovery metric counts it as a success.</li>
+    <li><b>Proposed Q4 KRs</b> (section 4): Lost Scribes, mobile audio gap after an app kill, Android crash-free users, and Unexpected Failures redefined without microphone failures.</li>
+  </ul></div>
+
+  <h2 id="okr">1. Review of the Q4 Frontend OKR draft</h2>
+  <p>Source: the "Enterprise Reliability" section of the Ambient 2026 Q4 drafting doc (Frontend OKRs, Q3 scoring, Q4 roadmap).</p>
+  <table>
+    <tr><th class="l">Concern</th><th class="l">Detail</th></tr>
+    <tr><td class="l">Same goals as Q3</td><td class="l">All five Frontend metrics scored orange in Q3 and keep the same goals. Unexpected failures asks for a 92% cut (0.12% to 0.01%) after a 14% improvement in Q3; stuck-in-cache asks for 10x.</td></tr>
+    <tr><td class="l">Stuck in Cache contradicts itself</td><td class="l">Q3 notes call it "not a good metric" and plan "% chunk recovery", but Q4 still lists it with a 0.20% goal.</td></tr>
+    <tr><td class="l">Metrics and roadmap don't line up</td><td class="l">Audio discrepancy has a goal but no roadmap item; "reliable audio persistence 99.99%" and "reduce background audio interruption -50%" have no baseline or definition; architecture debt (MVVM, DI) has no KR; device farm, global paused state and support-to-metrics mapping dropped from Q3's future list.</td></tr>
+    <tr><td class="l">Crash-free goals only undo Q3</td><td class="l">The goals match Q2 values and are still marked "?". Android fell furthest in Q3 but the roadmap's memory work is iOS-flavored.</td></tr>
+    <tr><td class="l">Chunking has no target</td><td class="l">It is the main lost-scribe lever, blocked on most enterprise sites, with no rollout percentage and no listed risk.</td></tr>
+    <tr><td class="l">Stale or inconsistent numbers</td><td class="l">Frontend baselines (week of 9/28) equal the Q3-end values exactly; Backend uses 10/5 to 10/11. Frontend API p75 goal is 200 ms in the pillar table and 250 ms in the OKR table, with the current value already 212 ms.</td></tr>
+  </table>
+
+  <h2 id="unexpected">2. Unexpected Recording Failures</h2>
+  <h3>How the rate is calculated <span class="tag">checked in code</span></h3>
+  <p><code>% Unexpected Recording Failures = failed / attempted</code> (<code>reun_all_metrics.js</code>). <b>failed</b> is the sum of <code>COUNT(*)</code> of <code>SCRIBE_FAILED</code> <i>events</i> from <code>get_scribe_failed_metrics.sql</code>, with internal accounts removed and only two "recording too short" reasons excluded. <b>attempted</b> is <code>scribes + lost + netStuck + failed</code>, so <code>failed</code> sits in both the numerator and the denominator.</p>
+  <ul>
+    <li>It counts events, not distinct scribes. A retrying user can log several failures for one session.</li>
+    <li><code>failure_reason NOT IN (...)</code> is NULL for events with no reason, so those events are silently dropped.</li>
+    <li>Per-platform rows drop web rows with no <code>browser_name</code>, so they may not add up to the rollup.</li>
+    <li>Sanity check: 345 events in 4 days is about 600 a week; at roughly 400K scribes a week (Q4 doc) that is about 0.15%, in line with 0.12%.</li>
+  </ul>
+
+  <h3>What the failures are <span class="tag">345 events, Oct 5-8, internal accounts included</span></h3>
+  <p class="note">Source: Retool query on <code>scribe_events</code> (CSV 20261015-001). Categories are my grouping of the raw <code>failure_reason</code> text.</p>
+  <div class="chart" id="cFail"></div>
+
+  <h3>What the rate looks like under each scenario</h3>
+  <p class="note">Scales the dashboard's 0.12% by each scenario's share of the 345 events. Assumes the 4-day mix matches the weekly mix and the 0.12% baseline is current.</p>
+  <div class="chart" id="cScen"></div>
+  <table>
+    <tr><th class="l">Scenario</th><th>Events</th><th>Est. rate</th><th>vs 0.01% goal</th></tr>
+    <tr><td class="l">Today (mic failures counted)</td><td>345</td><td>0.120%</td><td>12x</td></tr>
+    <tr><td class="l">Exclude "No microphone detected"</td><td>102</td><td>0.035%</td><td>3.5x</td></tr>
+    <tr><td class="l">Also fix strict DB errors (5 SqliteException, 0 wasm)</td><td>97</td><td>0.034%</td><td>3.4x</td></tr>
+    <tr><td class="l">Also fix "Failed to save/retrieve" (44 events; Sentry traces them to the local cache write path, root cause not confirmed as SQLite)</td><td>53</td><td>0.018%</td><td>1.8x</td></tr>
+  </table>
+  <div class="box warn"><ul>
+    <li><b>Definition mismatch:</b> the Notion page lists a missing microphone as an <i>expected</i> failure, but the SQL does not exclude it. By platform, iOS failures are 85% microphone and Android 100%.</li>
+    <li>What is left after excluding the mic failures is about half local-storage failures ("Failed to save/retrieve", 44 events) and half other causes: web-app <code>stop()</code> returning null (24 events, about 5,000 ms durations), "previous recording still processing" (19, mostly web app), and iOS "Failed to save recording data" (26).</li>
+    <li>163 iOS microphone failures in four days is high for a "user-fixable" problem. It may be an audio-session or permission issue worth a look.</li>
+  </ul></div>
+
+  <h2 id="db">3. The two DB-related Sentry errors</h2>
+  <p>Saved views: <code>message:*SqliteException*</code> and <code>error_type:wasm_preload_failure</code> (project scribe-mobile, production, 7 days to 2026-10-15).</p>
+  <table>
+    <tr><th class="l">Error</th><th>Events</th><th>Users</th><th class="l">What the data shows</th></tr>
+    <tr><td class="l">SqliteException</td><td>778</td><td>about 68</td><td class="l">79% WEB_CHROME, mostly caught exceptions. 4 users make 62% of events. Top issue: disk I/O error reading <code>file_part_table</code> (the local audio-chunk table).</td></tr>
+    <tr><td class="l">wasm_preload_failure, retries</td><td>379</td><td>205</td><td class="l">App load, attempt 1 or 2 of 3, route <code>/</code>. Retried.</td></tr>
+    <tr><td class="l">wasm_preload_failure, final attempt</td><td>46</td><td>29</td><td class="l">Almost all WEB_APP. 95% of wasm events are the 30-second timeout on <code>/sqlite3.wasm</code>.</td></tr>
+  </table>
+  <p class="note">The wasm issue list sums to 534 events but the aggregate search returned 425; I used the aggregate for the retry split. The SqliteException list returned exactly 25 issues (the limit), so there may be more.</p>
+
+  <h3>Do the affected users lose scribes? <span class="tag">82 users, Oct 8-14</span></h3>
+  <p class="note">Sentry user id matched <code>scribe_accounts.id</code> for all 82 ids (Retool, CSV 20261015-002). Gap = recordings started minus scribe rows created.</p>
+  <table>
+    <tr><th class="l">Group</th><th>Accounts</th><th>Started</th><th>Scribes made</th><th>Gap</th></tr>
+    <tr><td class="l">SqliteException users</td><td>53</td><td>2,666</td><td>2,615</td><td>51 (1.9%)</td></tr>
+    <tr><td class="l">wasm last-attempt users</td><td>29</td><td>875</td><td>899</td><td>negative (timing)</td></tr>
+    <tr><td class="l">Dashboard-wide reference (lost + failed + stuck)</td><td colspan="3"></td><td>about 2%</td></tr>
+  </table>
+  <div class="box warn"><ul>
+    <li><b>This check does not show the DB errors are harmless.</b> It only shows these users' <i>scribe counts</i> look normal. Weaknesses: (1) I compared against the dashboard's roughly 2% (lost + failed + stuck), which is not the same measure as "started minus made", so the true baseline gap is unknown and 1.9% could be elevated; (2) it checks that a scribe exists, not that its audio is complete, and the top SqliteException issue is a disk I/O error reading <code>file_part_table</code> (audio chunks), which points at <b>audio discrepancy</b> (1.31%), which I did not test; (3) 11 iOS users with device-style ids and the events with no user could not be matched; (4) per-user totals dilute errors that hit only some of a user's recordings.</li>
+    <li><b>The failure events do carry the DB problem.</b> Sentry (14 days, production) shows "Failed to save recording data. Please try again." thrown from <code>CacheRepository.insertAudioCache</code> (iOS: 231 events, 59 users), <code>insertFilePart</code> and <code>_writeCacheWithParts</code>, and "Failed to retrieve recording data" from the same area. These wrap local cache writes, so the underlying <code>SqliteException</code> is hidden behind a generic message and my string match on "SqliteException" (5 events) badly undercounted. "Failed to save/retrieve" is 44 of 345 failure events (13%) and these feed Unexpected Failures.</li>
+    <li>The Q4 doc's own "Harden local storage" item says the intent is to stop recordings from failing to start or upload when the database cannot save audio, which matches these failures.</li>
+    <li>Still true: 4 wasm users (ids 300270, 114511, 113581, 311335) had a final failure and no recordings that week and may have been blocked. No dashboard metric can see them because no recording starts.</li>
+    <li><b>What would settle it:</b> audio-discrepancy rate for the SqliteException users vs all users; the true started-minus-made baseline for all users; and the underlying exception behind "Failed to save recording data" (event detail in Sentry).</li>
+  </ul></div>
+
+  <h2 id="goal">4. Proposed Q4 goals</h2>
+  <p>Baselines come from the analysis in this report. The goals are my judgment, mostly "halve it" where there is a named lever. Nothing here has been put into the Notion doc.</p>
+  <table>
+    <tr><th class="l">#</th><th class="l">KR</th><th class="l">Baseline</th><th class="l">Q4 goal</th><th class="l">Main levers</th><th class="l">Confidence</th></tr>
+    <tr><td class="l">1</td><td class="l"><b>% Lost Scribes</b></td><td class="l">0.02% (about 80 a week)</td><td class="l">0.01% (about 40 a week)</td><td class="l">Chunking rollout, with a target for the share of enterprise users on it</td><td class="l">Goal is the doc's own; the chunking target is still missing.</td></tr>
+    <tr><td class="l">2</td><td class="l"><b>Mobile recordings with an audio gap after an app kill</b></td><td class="l">About 0.1% of mobile scribes (about 46 a day; 8% of active kills; Oct 6 only)</td><td class="l">Halve, to about 0.05%</td><td class="l">Fewer active kills; better recovery of the audio file after a kill (fired for 5% of iOS background kills)</td><td class="l">One day of data. Get 2-3 more weeks before locking.</td></tr>
+    <tr><td class="l">3</td><td class="l"><b>Android crash-free users</b></td><td class="l">98.73% (week of Oct 5)</td><td class="l">99.4% (doc: 99.39%)</td><td class="l">Remove the foreground-service crash (about 16 users a week) and fix the Intune/MAM crashes (74% of last week's crashes together)</td><td class="l">Fairly good for Android. iOS crash data not examined; keep the doc's iOS goal until checked.</td></tr>
+    <tr><td class="l">4</td><td class="l"><b>Unexpected Recording Failures, redefined</b> (microphone failures excluded)</td><td class="l">About 0.035% (the doc's 0.12% includes mic)</td><td class="l">0.02%</td><td class="l">Local-storage fixes (about half of what is left), then web <code>stop()</code> null and "previous recording still processing"</td><td class="l">Moderate. The SQLite link is likely, not confirmed.</td></tr>
+  </table>
+  <h3>Tracked, no goal</h3>
+  <ul>
+    <li><b>Audio Discrepancy, headline (1.31%):</b> dominated by web and with no roadmap item. Show mobile separately.</li>
+    <li><b>Local DB init failures</b> (final-attempt wasm failures): new health metric for the users who cannot record at all; no existing metric sees them.</li>
+    <li><b>Recovery metric:</b> keep as a diagnostic after fixing its denominator, not as a KR. It counts a scribe with missing audio as a success (sections 5 and 6).</li>
+  </ul>
+  <h3>Retire as a goal</h3>
+  <ul><li><b>% Scribes Stuck in Cache.</b> The doc already calls it a bad metric. Note it is currently the only metric that sees a recording left paused after a kill, so keep a kill-linked number (KR 2) when it goes.</li></ul>
+  <h3>Why this set</h3>
+  <ul>
+    <li>Each KR maps to a real user problem and a named lever. The DB work lands in KR 4; the background-recording complaint has its own KR (2).</li>
+    <li>The metrics dropped as goals either look healthy while the customer problem continues, or measure the wrong population.</li>
+  </ul>
+  <h3>Settle before committing</h3>
+  <ul>
+    <li>Decide whether "No microphone detected" counts as unexpected (KR 4 depends on it). A SQL fix for this and the NULL <code>failure_reason</code> hole was drafted as PR #1 and then closed and reverted; the dashboard query is unchanged.</li>
+    <li>Get more weeks of baseline for KR 2.</li>
+    <li>Add the missing chunking rollout target (KR 1).</li>
+    <li>Check iOS crash numbers and what changed around Sep 14 for the Intune crashes (KR 3).</li>
+    <li>Check the 3.42.0 (1013) rollout: it had no sessions in Oct 5-11, so fixes in it are not reaching users yet.</li>
+  </ul>
+
+  <h2 id="recovery">5. The recovery metric: what it really measures</h2>
+  <p><code>% of scribes succeeded in uploading or recovered</code> is computed in <code>get_scribe_cache_health_recovery_aware.sql</code> and the <code>rollupSpecs</code> in <code>reun_all_metrics.js</code>.</p>
+  <ul>
+    <li><b>Denominator:</b> distinct recordings whose local cache was seen in state <code>paused</code> or <code>error</code> in at least one <code>SCRIBE_AUDIO_CACHE_HEALTH_V3</code> check-in, counted once at first sighting, with the cache created inside the window. This is a state seen in a check-in, not a "user tapped pause" event, and <code>error</code> is included.</li>
+    <li><b>Numerator:</b> those recordings that later have a row in the server <code>scribe</code> table between cache creation and the end of the week. Recordings still uploading at the cutoff count as not recovered.</li>
+  </ul>
+  <h3>Which stage of the flow does it cover?</h3>
+  <table>
+    <tr><th class="l">Stage</th><th class="l">Covered?</th><th class="l">Why</th></tr>
+    <tr><td class="l">Recording starts</td><td class="l"><b>No</b></td><td class="l">Start failures and sessions that never began are not in the population.</td></tr>
+    <tr><td class="l">Audio recorded to local cache</td><td class="l">Partly</td><td class="l">Only if the cache was later reported paused or error.</td></tr>
+    <tr><td class="l">Upload</td><td class="l">Partly</td><td class="l">A crash or closed tab sends no check-in, so it never enters the population (it shows up under lost scribes instead).</td></tr>
+    <tr><td class="l">Scribe creation</td><td class="l">Weakly</td><td class="l">A scribe row "exists"; its status and audio completeness are not checked.</td></tr>
+    <tr><td class="l">Transcription and note completion</td><td class="l"><b>No</b></td><td class="l">Nothing looks past the scribe row.</td></tr>
+  </table>
+  <div class="box warn"><ul>
+    <li><b>The worst failures are excluded</b> (crashes and closed tabs send no check-in).</li>
+    <li><b>It counts missing audio as success.</b> "Recovered" only means a scribe row exists. After a background kill the user resumes, a scribe lands, and the earlier audio is missing; the metric calls that recovered (see section 6).</li>
+    <li><b>"Paused" includes normal behavior:</b> a clinician pausing mid-visit is also <code>paused</code>. If they resume and finish they count as "recovered", which pushes the rate toward 100%. I could not size this effect; what sets the <code>paused</code> state in the app was not confirmed.</li>
+    <li><b>The group size does not reconcile:</b> stuck-in-cache is 1.97% of attempts while 2.7% of the "ever stuck" group went unrecovered. Those only fit if the group were most of all scribes; they come from different queries.</li>
+    <li>A second similar metric ("% Scribe Recovered After Stuck in Cache", goal 90%) uses a different calculation; the doc's 97.30% and goal 99% belong to the one described here.</li>
+    <li>It is per recording, not per chunk; the Q3 notes plan to move to "% chunk recovery".</li>
+  </ul></div>
+  <p><b>For a whole-flow KR</b> the shape would be a funnel: started, recorded, uploaded (scribe row), audio complete (no discrepancy), note completed, with a rate at each step. Today's metrics each cover one slice and nothing covers completion. I did not check whether the <code>scribe</code> table's status columns support the last step.</p>
+
+  <h2 id="kills">6. Are app kills captured by the recovery metric?</h2>
+  <p>Input: <code>app-kill-oom-sql</code>, which counts <code>APP_KILLED_DETECTED</code> events for recordings that were still active. It does not detect out-of-memory; it counts any detected kill. Cross-check run in Retool for kills detected on Tue 2026-10-06 (CSVs 003, 004, 005 (kill cross-check) and 006, 007 (audio gap); lite queries without the "active" filter, internal accounts included).</p>
+  <h3>Code read</h3>
+  <ul>
+    <li><b>Lost scribes</b> requires <code>error_events = 0</code>, and <code>APP_KILLED_DETECTED</code> counts as an error event, so a killed recording is never counted as lost.</li>
+    <li><b>Unexpected failures</b> counts only the <code>SCRIBE_FAILED</code> tag, so kills are not counted.</li>
+    <li><b>Recovery metric</b> sees a kill only if the cache was observed paused or error.</li>
+  </ul>
+  <h3>How many of 1,988 killed recordings does the recovery metric see?</h3>
+  <div class="legend">
+    <span><i style="background:var(--series-1)"></i>In recovery population (seen paused/error)</span>
+    <span><i style="background:var(--series-3)"></i>Has scribe row, not in population</span>
+    <span><i style="background:var(--series-2)"></i>Invisible (no scribe row in 3 days, never paused/error)</span>
+  </div>
+  <div class="chart" id="cKill"></div>
+  <p class="note">Segments partition each row; hover for counts. Totals: 661 in population (33%), 618 landed but not in population (31%), 709 invisible (36%).</p>
+
+  <h3>What are the 709 invisible ones?</h3>
+  <table>
+    <tr><th class="l">Signal</th><th>Recordings</th><th>Share of 709</th></tr>
+    <tr><td class="l">Recording ended normally</td><td>520</td><td>73%</td></tr>
+    <tr><td class="l">Upload finished (<code>AUDIO_CACHE_UPLOAD_ENDED</code>)</td><td>465</td><td>66%</td></tr>
+    <tr><td class="l">No start or cache event in Oct 5-8</td><td>204</td><td>29%</td></tr>
+    <tr><td class="l">Too short / has a failure event</td><td>5 / 8</td><td>1% / 1%</td></tr>
+    <tr><td class="l">Looks like a real loss (cached, never ended, never uploaded, not short, no failure)</td><td>1</td><td>0.1%</td></tr>
+    <tr><td class="l"><b>Scribe row exists, created before Oct 6</b></td><td><b>683</b></td><td><b>96%</b></td></tr>
+    <tr><td class="l"><b>No scribe row ever</b></td><td><b>26</b></td><td><b>3.7%</b></td></tr>
+    <tr><td class="l">Upload finished but no scribe row ever</td><td>0</td><td>0%</td></tr>
+  </table>
+  <div class="box answer"><ul>
+    <li>The recovery metric <b>does miss most background kills</b>: only 22-26% of iOS/Android background kills enter its population, and 38-46% of them are invisible by that definition.</li>
+    <li><b>The cost of that miss looks small for scribe existence.</b> Only 26 of 1,988 killed recordings (1.3%) have no scribe ever, which is the same order as the lost-scribes figure of roughly 11 a day.</li>
+    <li><b>There is no upload-to-scribe-creation hole in this sample.</b> All 465 recordings with a finished upload have a scribe row.</li>
+    <li>Most "kills" are likely not interrupted recordings: 683 of the 709 invisible ones already had a scribe row from before the day, so the kill event probably points at the app's last, already-finished recording (inference).</li>
+    <li>Where the metric does see kills it looks worse than the headline: 597 of 661 recovered (90%) vs 97.3%.</li>
+  </ul></div>
+  <h3>Do kills leave scribes with missing audio? <span class="tag">the customer complaint</span></h3>
+  <p>Customers report: they record in the background, the app is killed, they reopen it and it shows "paused", they resume, and the audio from before is missing. That is a scribe that <i>lands</i> with a gap, which none of the checks above measure. Test: compare client recording length (the <code>PARALLEL_RECORDING_ENDED</code> payload) with server <code>audio_length_in_seconds</code>, using the same rule as Audio Discrepancy (client more than 10 seconds longer).</p>
+  <h3>Killed vs normal recordings, Oct 6 <span class="tag">CSV 006, no "active" filter</span></h3>
+  <div class="chart" id="cGap"></div>
+  <table>
+    <tr><th class="l">Platform</th><th class="l">Group</th><th>Recordings</th><th>Gap over 10s</th><th>Gap over 60s</th></tr>
+    <tr><td class="l">iOS</td><td class="l">killed</td><td>1,509</td><td><b>51 (3.4%)</b></td><td>23 (1.5%)</td></tr>
+    <tr><td class="l">iOS</td><td class="l">not killed</td><td>39,819</td><td>44 (0.1%)</td><td>32 (0.08%)</td></tr>
+    <tr><td class="l">Android</td><td class="l">killed</td><td>234</td><td><b>4 (1.7%)</b></td><td>2 (0.9%)</td></tr>
+    <tr><td class="l">Android</td><td class="l">not killed</td><td>3,637</td><td>2 (0.05%)</td><td>1 (0.03%)</td></tr>
+    <tr><td class="l">Web app</td><td class="l">killed / not killed</td><td>16 / 17,168</td><td>2 (12.5%) / 685 (4.0%)</td><td>2 / 478</td></tr>
+    <tr><td class="l">Web Chrome</td><td class="l">killed / not killed</td><td>39 / 4,974</td><td>18 (46%) / 168 (3.4%)</td><td>11 / 103</td></tr>
+  </table>
+  <p class="note">The web killed rows are too small to trust. The killed group includes stale kill events (recordings already finished), so it understates the rate for truly interrupted recordings.</p>
+  <h3>Active kills only, mobile, Oct 6 <span class="tag">CSV 007, one-day metric query</span></h3>
+  <table>
+    <tr><th class="l"></th><th>iOS</th><th>Android</th><th>Total</th></tr>
+    <tr><td class="l">Mobile scribes created</td><td>41,193</td><td>6,481</td><td>47,674</td></tr>
+    <tr><td class="l">Active killed recordings</td><td>599</td><td>78</td><td>677</td></tr>
+    <tr><td class="l">Landed a scribe</td><td>577</td><td>76</td><td>653</td></tr>
+    <tr><td class="l">Measurable (scribe and end event)</td><td>525</td><td>66</td><td>591</td></tr>
+    <tr><td class="l"><b>Gap over 10s</b></td><td><b>43</b></td><td><b>3</b></td><td><b>46</b></td></tr>
+    <tr><td class="l">Gap over 60s</td><td>17</td><td>1</td><td>18</td></tr>
+    <tr><td class="l">Gap over 10s, % of all mobile scribes</td><td>0.104%</td><td>0.046%</td><td>0.097%</td></tr>
+    <tr><td class="l">Gap over 10s, % of measurable kills</td><td>8.2%</td><td>4.5%</td><td>7.8%</td></tr>
+  </table>
+  <div class="box answer"><ul>
+    <li><b>Audio Discrepancy does see the complaint on mobile.</b> Killed mobile recordings are about 20-30 times more likely to have a gap over 10 seconds, so the client's <code>recording_length</code> must still include the lost pre-kill time.</li>
+    <li><b>Most active kills do not lose audio</b> (about 92% show no gap over 10s); the loss is concentrated in about 8%. Two levers: how often active recordings are killed (1.4% of mobile scribes on this day) and how often a kill leaves a gap.</li>
+    <li><b>Size:</b> about 46 recordings a day over 10 seconds and about 18 over 60 seconds. A rough weekly scale-up is about 320 and about 125 (one Tuesday, so approximate). Lost scribes is about 11 a day for comparison.</li>
+    <li><b>The headline hides it.</b> Web is about 90% of recordings with a gap over 10 seconds on this day, and mobile kills about 5%. Mobile Audio Discrepancy overall is about 0.2%, already under the 0.5% goal. A goal on the headline would not reflect this complaint.</li>
+    <li><b>The recovery metric counts these recordings as successes</b> (a scribe row exists), so it cannot serve as the KR for this problem.</li>
+  </ul></div>
+  <p><b>Proposed metric:</b> "mobile recordings with an audio gap after an app kill", reported as a count and as a share of mobile scribes, with the over-60-second count as the severe version. It is a slice of Audio Discrepancy (same gap rule), so report it next to the headline. Queries: <code>20261015-kill-audio-gap-metric-day.sql</code> (one day, untested at week scale; the week version timed out). A more direct measure needs the app to log expected vs recovered audio seconds on resume after a kill.</p>
+  <p class="note">Limits: one day; the gap only counts client-longer cases and ignores gaps under 10 seconds; 24 active kills never landed a scribe and 62 landed without an end event, so they sit outside the numerator; resumes after Oct 9 are not captured. Crashlytics also does not show OS process kills as crashes (general platform behavior, not confirmed for this app).</p>
+
+  <h2 id="android">7. Android crashes (Crashlytics)</h2>
+  <p>Full interactive report with weekly charts, issue table and links: <a href="20261015-android-crash-trend.html">20261015-android-crash-trend.html</a>. Summary:</p>
+  <table>
+    <tr><th class="l">Week</th><th>Crashes</th><th>Crash-free users</th><th>Foreground service</th><th>Intune/MAM</th></tr>
+    <tr><td class="l">Aug 31 - Sep 6</td><td>35</td><td>98.93%</td><td>27</td><td>6</td></tr>
+    <tr><td class="l">Sep 7 - 13</td><td>18</td><td>99.45%</td><td>17</td><td>0</td></tr>
+    <tr><td class="l">Sep 14 - 20</td><td>134</td><td>96.34%</td><td>20</td><td>102</td></tr>
+    <tr><td class="l">Sep 21 - 27</td><td>37</td><td>98.81%</td><td>20</td><td>14</td></tr>
+    <tr><td class="l">Sep 28 - Oct 4</td><td>98</td><td>97.61%</td><td>20</td><td>54</td></tr>
+    <tr><td class="l">Oct 5 - 11</td><td>38</td><td>98.73%</td><td>18</td><td>10</td></tr>
+  </table>
+  <ul>
+    <li><b>Foreground service</b> (<code>ForegroundServiceDidNotStopInTimeException</code>, muted since 3/31): a flat floor of about 16 users a week. Android shuts the app down when its background service (data-sync type, our <code>flutter_background_service</code>) does not stop within its time limit. In the latest week 100% were in the background, 78% Samsung, 56% Android 16. At roughly 2,400-2,800 active users it alone caps crash-free users near 99.3-99.4%, against the Q4 goal of 99.39%.</li>
+    <li><b>Intune/MAM</b> (seven issues in Microsoft's MAM SDK screens, all "early crashes" at launch): zero in Sep 7-13, then 102 events the next week, 14, 54, and 10. Something changed around Sep 14; not yet investigated.</li>
+    <li>In Oct 5-11 these two groups were 74% of 38 crashes (foreground 47%, MAM 26%).</li>
+    <li><b>Versions, Oct 5-11:</b> 3.41.0 15 events, 3.40.2 17, 3.40.0 2, old 3.29-3.32 4 (out-of-memory), <b>3.42.0 zero.</b> But filtering to 3.42.0 shows no sessions at all in that window, so the latest build had essentially no users yet and the zero is not evidence of a fix.</li>
+    <li>Out-of-memory crashes are negligible on Android (5 of 360 over six weeks), so the Q3 "low memory" explanation applies to iOS, not Android.</li>
+  </ul>
+
+  <h2 id="caveats">8. Caveats and next steps</h2>
+  <h3>Caveats</h3>
+  <ul>
+    <li><b>The StarRocks mirror reachable from the Claude skill stops at 2026-08-28</b> (<code>scribe_events</code> has no rows after that, while other tables are current). All event analysis above therefore used Retool's connection. The pipeline owner should check why the mirror stopped, and whether the Retool resource reads the same warehouse.</li>
+    <li>Samples are small: 4 days of failures, 1 day of kills, 82 Sentry users, one week of per-issue Crashlytics detail. Internal accounts are included in the ad-hoc queries (not in the dashboard).</li>
+    <li>The Q4 baselines in the OKR doc may not be freshly computed.</li>
+    <li>A SQL correction for Unexpected Failures (exclude microphone failures, fix the NULL <code>failure_reason</code> hole) was opened as PR #1 and then closed and reverted. The dashboard query is unchanged.</li>
+    <li>Weekly active user counts are back-calculated from Crashlytics percentages, so they are approximate.</li>
+  </ul>
+  <h3>Suggested next steps</h3>
+  <ul>
+    <li>Decide whether "No microphone detected" belongs in Unexpected Failures; re-baseline, then set the goal.</li>
+    <li>Size the recovery metric's population: split first-stuck recordings by paused vs error and compare with recordings started. This shows how much of 97.3% is normal pausing.</li>
+    <li>Run the one-day kill audio-gap query for more days to firm up the baseline (0.1% of mobile scribes, 8% of active kills), and split it by background vs foreground, app version and time before the kill.</li>
+    <li>Investigate what changed around Sep 14 for the MAM crashes (releases, rollout, enterprise onboarding) and which service the foreground-service crash is.</li>
+    <li>Check 3.42.0 (1013) rollout in Firebase Release Monitoring.</li>
+    <li>Fix the NULL <code>failure_reason</code> hole in <code>get_scribe_failed_metrics.sql</code> (no code has been changed so far).</li>
+  </ul>
+  <h3>Files from this analysis (in <code>docs/</code>)</h3>
+  <table>
+    <tr><th class="l">File</th><th class="l">What it is</th></tr>
+    <tr><td class="l"><code>20261015-unexpected-failures-findings.md</code>, <code>20261015-unexpected-failures-scenarios-and-sentry.md</code></td><td class="l">Failure breakdown, scenarios, Sentry numbers</td></tr>
+    <tr><td class="l"><code>20261015-db-sentry-impact-check.md</code></td><td class="l">Sentry user vs scribe outcome check</td></tr>
+    <tr><td class="l"><code>20261015-android-crash-trend.html</code></td><td class="l">Android crash charts and links</td></tr>
+    <tr><td class="l"><code>20261015-app-kill-recovery-check-lite.sql</code>, <code>-invisible-breakdown.sql</code>, <code>-scribe-ever.sql</code></td><td class="l">The three kill cross-check queries</td></tr>
+    <tr><td class="l"><code>20261015-kill-audio-gap-check.sql</code>, <code>-kill-audio-gap-metric-day.sql</code></td><td class="l">Kill vs normal audio-gap comparison and the one-day metric query</td></tr>
+    <tr><td class="l"><code>20261015-001.csv</code> to <code>-007.csv</code></td><td class="l">Query results used above</td></tr>
+  </table>
+</div>
+
+<script>
+const css = v => getComputedStyle(document.getElementById('root')).getPropertyValue(v).trim();
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function mkTip(c) { const t = document.createElement('div'); t.className = 'tip'; c.appendChild(t); return t; }
+function showTip(t, c, e, html) {
+  t.innerHTML = html; t.style.display = 'block';
+  const r = c.getBoundingClientRect();
+  let left = e.clientX - r.left + 14, top = e.clientY - r.top - 10;
+  if (left + t.offsetWidth > r.width) left = e.clientX - r.left - t.offsetWidth - 14;
+  t.style.left = left + 'px'; t.style.top = top + 'px';
+}
+
+// Horizontal bar chart. items: {label, value, text, tip}
+function hbar(id, items, max, color, goal) {
+  const c = document.getElementById(id); c.innerHTML = ''; const tip = mkTip(c);
+  const W = 800, L = 300, R = 90, rowH = 34, H = items.length * rowH + 28;
+  const pw = W - L - R;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, c);
+  items.forEach((it, i) => {
+    const y = 10 + i * rowH, w = Math.max(2, (it.value / max) * pw);
+    const t = el('text', { x: L - 10, y: y + 18, 'text-anchor': 'end' }, svg); t.textContent = it.label;
+    const r = el('rect', { x: L, y: y + 4, width: w, height: 20, fill: it.color || color, rx: 4 }, svg);
+    const v = el('text', { x: L + w + 8, y: y + 18, class: 'val' }, svg); v.textContent = it.text;
+    const hit = el('rect', { x: 0, y: y, width: W, height: rowH, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', e => showTip(tip, c, e, it.tip || `<b>${it.label}</b>${it.text}`));
+    hit.addEventListener('mouseleave', () => tip.style.display = 'none');
+  });
+  el('line', { x1: L, x2: L, y1: 4, y2: H - 18, stroke: css('--axis') }, svg);
+  if (goal) {
+    const gx = L + (goal.value / max) * pw;
+    el('line', { x1: gx, x2: gx, y1: 4, y2: H - 18, stroke: css('--goal'), 'stroke-width': 2, 'stroke-dasharray': '5 4' }, svg);
+    const gt = el('text', { x: gx + 6, y: H - 4 }, svg); gt.textContent = goal.label; gt.setAttribute('fill', css('--goal')); gt.style.fill = css('--goal');
+  }
+}
+
+// 100% stacked horizontal bars. rows: {label, parts:[n,n,n]}
+function stacked(id, rows, colors, names) {
+  const c = document.getElementById(id); c.innerHTML = ''; const tip = mkTip(c);
+  const W = 800, L = 190, R = 20, rowH = 40, H = rows.length * rowH + 20, pw = W - L - R;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, c);
+  rows.forEach((r, i) => {
+    const y = 8 + i * rowH, tot = r.parts.reduce((a, b) => a + b, 0);
+    const t = el('text', { x: L - 10, y: y + 20, 'text-anchor': 'end' }, svg); t.textContent = `${r.label} (${tot.toLocaleString()})`;
+    let x = L;
+    r.parts.forEach((n, k) => {
+      if (!n) return;
+      const w = (n / tot) * pw, gap = 2;
+      const seg = el('rect', { x: x, y: y + 4, width: Math.max(1, w - gap), height: 24, fill: colors[k], rx: 3 }, svg);
+      if (w > 44) { const lab = el('text', { x: x + (w - gap) / 2, y: y + 21, 'text-anchor': 'middle', class: 'inbar' }, svg); lab.textContent = Math.round(100 * n / tot) + '%'; }
+      seg.addEventListener('mousemove', e => showTip(tip, c, e, `<b>${r.label}</b>${names[k]}: ${n.toLocaleString()} (${(100 * n / tot).toFixed(0)}%)`));
+      seg.addEventListener('mouseleave', () => tip.style.display = 'none');
+      x += w;
+    });
+  });
+}
+
+function draw() {
+  hbar('cFail', [
+    { label: 'No microphone detected', value: 243, text: '243 (70%)', color: css('--series-2') },
+    { label: 'Failed to save recording data', value: 33, text: '33 (10%)' },
+    { label: 'stop() returned null/empty path', value: 24, text: '24 (7%)' },
+    { label: 'Previous recording still processing', value: 19, text: '19 (6%)' },
+    { label: 'Retrieve stored file / recording data', value: 11, text: '11 (3%)' },
+    { label: 'Other (null checks, session, wakelock)', value: 10, text: '10 (3%)' },
+    { label: 'Explicit SQLite/DB exceptions', value: 5, text: '5 (1%)' },
+  ], 260, css('--series-1'));
+
+  hbar('cScen', [
+    { label: 'Today (mic failures counted)', value: 0.120, text: '0.120%' },
+    { label: 'Exclude "No microphone detected"', value: 0.035, text: '0.035%' },
+    { label: '... plus fix strict DB errors', value: 0.034, text: '0.034%' },
+    { label: '... plus fix save/retrieve (local cache)', value: 0.018, text: '0.018%' },
+  ], 0.14, css('--series-1'), { value: 0.010, label: 'goal 0.010%' });
+
+  hbar('cGap', [
+    { label: 'iOS, killed',        value: 3.4,  text: '3.4%',  color: css('--series-2') },
+    { label: 'iOS, not killed',    value: 0.1,  text: '0.1%',  color: css('--series-1') },
+    { label: 'Android, killed',    value: 1.7,  text: '1.7%',  color: css('--series-2') },
+    { label: 'Android, not killed', value: 0.05, text: '0.05%', color: css('--series-1') },
+  ], 4, css('--series-1'));
+
+  stacked('cKill', [
+    { label: 'iOS, background kill',     parts: [386, 522, 564] },
+    { label: 'Android, background kill', parts: [55, 78, 112] },
+    { label: 'iOS, foreground kill',     parts: [116, 5, 13] },
+    { label: 'Web app',                  parts: [60, 10, 18] },
+    { label: 'Web Chrome',               parts: [43, 2, 2] },
+    { label: 'Android, foreground kill', parts: [1, 1, 0] },
+  ], [css('--series-1'), css('--series-3'), css('--series-2')],
+     ['In recovery population', 'Has scribe row, not in population', 'Invisible']);
+}
+document.getElementById('theme').addEventListener('click', () => {
+  const de = document.documentElement;
+  const dark = de.dataset.theme ? de.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  de.dataset.theme = dark ? 'light' : 'dark'; draw();
+});
+draw();
+</script>
+</body>
+</html>

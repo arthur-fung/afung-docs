@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recording funnel and where each metric sits</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #ffffff; --ink: #1f2430; --muted: #5f6877; --line: #d5d9e0; --card: #f5f7fa;
+    --ok: #1f7a4d; --ok-bg: #e3f3ea;
+    --fail: #b3261e; --fail-bg: #fbe7e5;
+    --lost: #8a5a00; --lost-bg: #fdf0d5;
+    --gap: #5b3fb3; --gap-bg: #ece8fa;
+    --kill: #444b57; --kill-bg: #e8eaee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171d; --ink: #e8eaee; --muted: #9aa3b2; --line: #333a46; --card: #1c2028;
+      --ok: #6fd3a0; --ok-bg: #16352600;
+      --fail: #ff8f86; --fail-bg: #3a1c1a;
+      --lost: #f1c46a; --lost-bg: #3a2e12;
+      --gap: #b9a6ff; --gap-bg: #2a2342;
+      --kill: #c3c9d4; --kill-bg: #2a2f39;
+      --ok-bg: #163526;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 24px 56px; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .funnel { display: grid; grid-template-columns: 1fr 1.15fr; gap: 0 28px; align-items: stretch; }
+  .head { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+          padding-bottom: 8px; }
+  .stage-cell { display: flex; flex-direction: column; align-items: center; padding: 6px 0; }
+  .stage { border: 1px solid var(--line); background: var(--card); border-radius: 10px;
+           padding: 12px 14px; text-align: center; }
+  .stage b { display: block; font-size: 15px; }
+  .stage small { color: var(--muted); display: block; margin-top: 2px; }
+  .stage.w100 { width: 100%; } .stage.w92 { width: 92%; } .stage.w84 { width: 84%; }
+  .stage.w76 { width: 76%; }
+  .stage.done { border-color: var(--ok); background: var(--ok-bg); }
+  .arrow { color: var(--muted); font-size: 18px; line-height: 1; padding-top: 4px; }
+  .metric-cell { display: flex; flex-direction: column; justify-content: center; gap: 8px;
+                 padding: 6px 0 6px 18px; border-left: 2px dashed var(--line); position: relative; }
+  .metric { border-radius: 10px; padding: 10px 12px; border: 1px solid transparent; position: relative; }
+  .metric::before { content: ""; position: absolute; left: -20px; top: 50%; width: 18px;
+                    border-top: 2px solid var(--line); }
+  .metric h3 { margin: 0 0 2px; font-size: 14px; display: flex; justify-content: space-between; gap: 10px; }
+  .metric h3 span { font-weight: 600; white-space: nowrap; }
+  .metric p { margin: 0; color: var(--muted); font-size: 13px; }
+  .m-fail { background: var(--fail-bg); border-color: var(--fail); }
+  .m-lost { background: var(--lost-bg); border-color: var(--lost); }
+  .m-gap  { background: var(--gap-bg);  border-color: var(--gap); }
+  .m-kill { background: var(--kill-bg); border-color: var(--kill); }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+         border: 1px solid currentColor; margin-left: 6px; vertical-align: 1px; }
+  .cross { margin-top: 26px; border: 2px dashed var(--kill); border-radius: 12px; padding: 14px 16px;
+           background: var(--kill-bg); }
+  .cross h2 { margin: 0 0 6px; font-size: 16px; }
+  .cross ul { margin: 6px 0 0; padding-left: 20px; }
+  .cross li { margin: 3px 0; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 22px 0 0; font-size: 13px; color: var(--muted); }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px;
+              vertical-align: -1px; border: 1px solid; }
+  table { border-collapse: collapse; width: 100%; margin-top: 26px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 14px; }
+  @media (max-width: 760px) { .funnel { grid-template-columns: 1fr; } .metric-cell { border-left: 0; padding-left: 0; }
+                              .metric::before { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Recording funnel and where each metric sits</h1>
+  <p class="sub">Every recording an app attempts ends in exactly one place. Each Q4 metric watches one exit or one defect. Stage widths are illustrative, not to scale.</p>
+
+  <div class="funnel">
+    <div class="head">Funnel stage</div>
+    <div class="head">Metric watching this stage (baseline)</div>
+
+    <!-- 1 -->
+    <div class="stage-cell">
+      <div class="stage w100"><b>1. Recording attempted</b><small>user taps record, <code>PARALLEL_RECORDING_STARTED</code></small></div>
+      <div class="arrow">↓</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric m-fail">
+        <h3>Unexpected Recording Failures <span>0.12% → ~0.035% w/o mic</span></h3>
+        <p>Denominator for this metric is the whole attempted set: scribes + lost + stuck + failed.</p>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="stage-cell">
+      <div class="stage w92"><b>2. Recording runs, audio cached on device</b><small>local cache DB writes, chunks, background/foreground</small></div>
+      <div class="arrow">↓</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric m-fail">
+        <h3>Unexpected Recording Failures <span class="tag">exit: explicit error</span></h3>
+        <p><code>SCRIBE_FAILED</code> events. "Failed to save/retrieve recording data" comes from local DB writes (SqliteException). "No microphone" is 70% of events today and should be excluded.</p>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="stage-cell">
+      <div class="stage w84"><b>3. Recording ended, upload or recovery</b><small><code>PARALLEL_RECORDING_ENDED</code> (client length), then upload</small></div>
+      <div class="arrow">↓</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric m-lost">
+        <h3>% Lost Scribes <span>0.02% → 0.01%</span><span class="tag">exit: silent</span></h3>
+        <p>Started and cached audio, no scribe row, no error event, no recovery evidence, mature ≥24h.</p>
+      </div>
+      <div class="metric m-lost">
+        <h3>Stuck in Cache / Recovery rate <span>97.30%</span><span class="tag">exit: paused / error</span></h3>
+        <p>Cache health shows paused or error. Diagnostic only: it counts normal user pauses and misses recordings that never reach a check-in.</p>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="stage-cell">
+      <div class="stage w76 done"><b>4. Scribe row exists on server</b><small>success for the funnel, <code>audio_length_in_seconds</code> set</small></div>
+      <div class="arrow">↓</div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric m-gap">
+        <h3>Audio Discrepancy (headline) <span>1.31%</span><span class="tag">defect inside success</span></h3>
+        <p>Client length minus server length &gt; 10s. About 90% of it is web, so mobile problems are hidden.</p>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="stage-cell">
+      <div class="stage w76 done"><b>5. Scribe has the full audio</b><small>client length ≈ server length</small></div>
+    </div>
+    <div class="metric-cell">
+      <div class="metric m-gap">
+        <h3>Mobile audio gap after an app kill <span>~0.1% → ~0.05%</span></h3>
+        <p>Slice of Audio Discrepancy: mobile only, only recordings with an <code>APP_KILLED_DETECTED</code> event. 20–30× the normal gap rate on iOS and Android.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="cross">
+    <h2>Cross-cutting: app kills and crashes act on every stage</h2>
+    <p style="margin:0">They are not an exit of their own. They push a recording into one of the exits above.</p>
+    <ul>
+      <li><b>Kill, then recovery works:</b> scribe lands with full audio, nothing counted.</li>
+      <li><b>Kill, user resumes, earlier audio missing:</b> scribe lands (stage 4) but fails stage 5, so it shows up as a gap. This is the customer complaint.</li>
+      <li><b>Kill with an error event:</b> counted as failed or excluded from Lost (<code>APP_KILLED_DETECTED</code> is one of the exclusions).</li>
+      <li><b>Kill, never resumed, cache left paused:</b> Stuck in Cache. Kill with no trace at all: Lost.</li>
+      <li><b>Android crashes feed kills:</b> foreground-service crash (~16 users/week) and the Intune/MAM group. Metric: Android crash-free users <b>98.73% → 99.4%</b>.</li>
+    </ul>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:var(--fail-bg);border-color:var(--fail)"></i>explicit failure</span>
+    <span><i style="background:var(--lost-bg);border-color:var(--lost)"></i>recording lost or stuck</span>
+    <span><i style="background:var(--gap-bg);border-color:var(--gap)"></i>audio defect in a landed scribe</span>
+    <span><i style="background:var(--kill-bg);border-color:var(--kill)"></i>kills and crashes</span>
+  </div>
+
+  <table>
+    <thead><tr><th>Metric</th><th>Funnel exit it watches</th><th>Q4 role</th></tr></thead>
+    <tbody>
+      <tr><td>Unexpected Recording Failures</td><td>Explicit error (stage 2)</td><td>KR, after removing "no microphone"</td></tr>
+      <tr><td>% Lost Scribes</td><td>Silent loss (stage 3)</td><td>KR</td></tr>
+      <tr><td>Mobile audio gap after app kill</td><td>Landed scribe, missing audio (stage 5)</td><td>KR</td></tr>
+      <tr><td>Android crash-free users</td><td>Cause of kills across stages</td><td>KR</td></tr>
+      <tr><td>Audio Discrepancy (headline)</td><td>Stage 5, mostly web</td><td>Tracked, show mobile separately</td></tr>
+      <tr><td>Stuck in Cache / Recovery rate</td><td>Paused or error (stage 3)</td><td>Diagnostic only</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Buckets are mutually exclusive: a recording in Failed is not counted as Lost. Fixing failures does not reduce Lost directly. The kill gap is the one defect that sits inside recordings the funnel already counts as successes.</p>
+</div>
+</body>
+</html>

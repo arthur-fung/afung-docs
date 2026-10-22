@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android crash trend, Aug 31 – Oct 11 2026</title>
+<style>
+  :root { color-scheme: light; }
+  .viz-root {
+    --surface-1: #fcfcfb; --surface-2: #f4f3f0;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --grid: #e6e5e0; --axis: #c9c8c1;
+    --series-1: #2a78d6;   /* foreground service */
+    --series-2: #eb6834;   /* Intune / MAM */
+    --series-3: #9a9992;   /* other */
+    --link: #1c5cab;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) { color-scheme: dark; }
+    :root:where(:not([data-theme="light"])) .viz-root {
+      --surface-1: #1a1a19; --surface-2: #232321;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #9a998f;
+      --grid: #2e2e2b; --axis: #4a4a46;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #6f6e68;
+      --link: #86b6ef;
+    }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1: #1a1a19; --surface-2: #232321;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #9a998f;
+    --grid: #2e2e2b; --axis: #4a4a46;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #6f6e68;
+    --link: #86b6ef;
+  }
+  body { margin: 0; background: var(--surface-1); }
+  .viz-root {
+    background: var(--surface-1); color: var(--text-primary);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 880px; margin: 0 auto; padding: 32px 24px 64px;
+  }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 40px 0 4px; }
+  .sub { color: var(--text-secondary); margin: 0 0 20px; }
+  .note { color: var(--text-muted); font-size: 13px; margin: 4px 0 0; }
+  .takeaways { background: var(--surface-2); border-radius: 8px; padding: 14px 20px; margin: 16px 0 0; }
+  .takeaways li { margin: 6px 0; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0 4px; font-size: 13px; color: var(--text-secondary); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .chart { position: relative; }
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  svg text { fill: var(--text-secondary); font-size: 12px; }
+  svg .val { fill: var(--text-primary); font-weight: 600; }
+  .tip {
+    position: absolute; pointer-events: none; display: none; z-index: 5;
+    background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--axis);
+    border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 2px 8px rgba(0,0,0,.18);
+    white-space: nowrap;
+  }
+  .tip b { display: block; margin-bottom: 2px; }
+  .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+  a { color: var(--link); }
+  ul.links { padding-left: 18px; }
+  .tag { font-size: 11px; color: var(--text-muted); }
+  .toggle { float: right; font-size: 12px; background: none; border: 1px solid var(--axis); color: var(--text-secondary); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="viz-root" id="root">
+  <button class="toggle" id="theme" type="button">Toggle dark / light</button>
+  <h1>Android crash trend</h1>
+  <p class="sub">Scribe Android (<code>com.athelas.scribe</code>), crash events only, six Mon–Sun weeks, Aug 31 – Oct 11 2026. Source: Firebase Crashlytics (project athelas-scribe-mobile), read 2026-10-15.</p>
+
+  <ul class="takeaways">
+    <li><b>Foreground service</b> (<code>ForegroundServiceDidNotStopInTimeException</code>, muted since 3/31) is a flat floor: 17–27 events and 16–24 users every week, 122 events and 70 users over six weeks.</li>
+    <li><b>Intune / MAM</b> crashes are the spikes: zero in Sep 7–13, then 102 events the next week (76% of that week's crashes), 14, 54, and 10 in the latest week. Something changed around Sep 14; the cause is not yet known.</li>
+    <li>The two bad crash-free-user weeks (96.34% and 97.61%) are the two MAM spike weeks.</li>
+  </ul>
+
+  <h2>1. Weekly crash events: foreground service vs Intune / MAM</h2>
+  <p class="note">Same unit on one axis. MAM = seven issues grouped by me (listed below).</p>
+  <div class="legend">
+    <span><i style="background:var(--series-1)"></i>Foreground service</span>
+    <span><i style="background:var(--series-2)"></i>Intune / MAM group</span>
+  </div>
+  <div class="chart" id="c1"></div>
+
+  <h2>2. Where each week's crashes came from</h2>
+  <p class="note">Stacked weekly totals (35, 18, 134, 37, 98, 38).</p>
+  <div class="legend">
+    <span><i style="background:var(--series-1)"></i>Foreground service</span>
+    <span><i style="background:var(--series-2)"></i>Intune / MAM group</span>
+    <span><i style="background:var(--series-3)"></i>Other</span>
+  </div>
+  <div class="chart" id="c2"></div>
+
+  <h2>3. Crash-free users by week (whole Android app)</h2>
+  <p class="note">Crashlytics "crash-free users in selected 7 days". Q4 goal in the OKR doc: 99.39%.</p>
+  <div class="chart" id="c3"></div>
+
+  <details open>
+    <summary>Data table</summary>
+    <table id="tbl"></table>
+  </details>
+
+  <h2>Top issues over the six weeks (360 crashes, 239 users)</h2>
+  <table>
+    <tr><th>Issue</th><th>Group</th><th>Events</th><th>Users</th><th>Pattern</th></tr>
+    <tr><td>ForegroundServiceDidNotStopInTimeException (muted 3/31)</td><td>Foreground service</td><td>122</td><td>70</td><td>Steady, ~20 a week</td></tr>
+    <tr><td>CurrentTaskAuthorizationActivity.onMAMCreate</td><td>MAM</td><td>49</td><td>36</td><td>Spiky</td></tr>
+    <tr><td>MAMResolverActivity.onMAMCreate</td><td>MAM</td><td>49</td><td>32</td><td>Spiky</td></tr>
+    <tr><td>YubiKeyPromptActivity.onMAMCreate</td><td>MAM</td><td>43</td><td>31</td><td>Spiky</td></tr>
+    <tr><td>BackgroundService.updateNotificationInfo (muted 6/8)</td><td>Other</td><td>21</td><td>2</td><td>Crash loop from 2 users</td></tr>
+    <tr><td>MAMActivity.startActivityForResultReal</td><td>MAM</td><td>17</td><td>17</td><td>Spiky</td></tr>
+    <tr><td>OfflineActivityBehavior.onCreate</td><td>MAM</td><td>17</td><td>17</td><td>Spiky</td></tr>
+    <tr><td>billing ProxyBillingActivity.onCreate (muted 5/13)</td><td>Other</td><td>14</td><td>14</td><td>Low</td></tr>
+    <tr><td>ApkLibraryInstaller.installLibrary (muted 6/2)</td><td>Other</td><td>10</td><td>7</td><td>Low</td></tr>
+    <tr><td>InstallCertActivityLauncher.onMAMResume</td><td>MAM</td><td>10</td><td>10</td><td>Spiky</td></tr>
+    <tr><td>Out-of-memory (four issues), AuthenticationManagementActivity, MAMWebView</td><td>Other / MAM</td><td>8</td><td>n/a</td><td>Negligible</td></tr>
+  </table>
+  <p class="note">MAM group = CurrentTask 49 + MAMResolver 49 + YubiKey 43 + MAMActivity 17 + OfflineActivityBehavior 17 + InstallCert 10 + MAMWebView 1 = 186 events (52% of all crashes). Weekly values add up exactly to the six-week totals (122 and 186).</p>
+
+  <h2>Crashlytics links</h2>
+  <p class="note">All with crash events and all issue states, so the muted issues show. You must be signed in to Firebase.</p>
+  <ul class="links" id="links"></ul>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li>Weekly buckets only; per-issue daily counts were not pulled. Crash events only (no ANRs or non-fatal errors).</li>
+    <li>"Other" in chart 2 is total minus foreground service minus MAM: it includes <code>BackgroundService.updateNotificationInfo</code>, billing, relinker, and out-of-memory issues.</li>
+    <li>Why MAM crashes started around Sep 14 has not been investigated (releases, rollout, customer onboarding all unchecked).</li>
+  </ul>
+</div>
+
+<script>
+const weeks   = ['Aug 31–Sep 6', 'Sep 7–13', 'Sep 14–20', 'Sep 21–27', 'Sep 28–Oct 4', 'Oct 5–11'];
+const ranges  = ['Aug 31 – Sep 6', 'Sep 7 – 13', 'Sep 14 – 20', 'Sep 21 – 27', 'Sep 28 – Oct 4', 'Oct 5 – 11'];
+const fgs     = [27, 17, 20, 20, 20, 18];
+const fgsUsers= [24, 16, 16, 17, 16, 16];
+const mam     = [6, 0, 102, 14, 54, 10];
+const total   = [35, 18, 134, 37, 98, 38];
+const other   = total.map((t, i) => t - fgs[i] - mam[i]);
+const cfu     = [98.93, 99.45, 96.34, 98.81, 97.61, 98.73];
+const cfs     = [99.72, 99.85, 99.17, 99.71, 99.33, 99.70];
+const crashUsers = [32, 17, 100, 32, 67, 30];
+
+const css = v => getComputedStyle(document.getElementById('root')).getPropertyValue(v).trim();
+const NS = 'http://www.w3.org/2000/svg';
+const W = 760, H = 300, M = { l: 44, r: 96, t: 16, b: 32 };
+const pw = W - M.l - M.r, ph = H - M.t - M.b;
+const x = i => M.l + (pw * (i + 0.5)) / weeks.length;
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function tipFor(container) {
+  const t = document.createElement('div'); t.className = 'tip'; container.appendChild(t); return t;
+}
+function showTip(t, container, evt, html) {
+  t.innerHTML = html; t.style.display = 'block';
+  const r = container.getBoundingClientRect();
+  let left = evt.clientX - r.left + 14, top = evt.clientY - r.top - 10;
+  if (left + t.offsetWidth > r.width) left = evt.clientX - r.left - t.offsetWidth - 14;
+  t.style.left = left + 'px'; t.style.top = top + 'px';
+}
+
+function scaffold(container, yMax, yMin, ticks, fmt) {
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, container);
+  const y = v => M.t + ph - ((v - yMin) / (yMax - yMin)) * ph;
+  ticks.forEach(v => {
+    el('line', { x1: M.l, x2: W - M.r, y1: y(v), y2: y(v), stroke: css('--grid'), 'stroke-width': 1 }, svg);
+    const tx = el('text', { x: M.l - 8, y: y(v) + 4, 'text-anchor': 'end' }, svg); tx.textContent = fmt(v);
+  });
+  el('line', { x1: M.l, x2: W - M.r, y1: y(yMin), y2: y(yMin), stroke: css('--axis'), 'stroke-width': 1 }, svg);
+  weeks.forEach((w, i) => {
+    const tx = el('text', { x: x(i), y: H - 10, 'text-anchor': 'middle' }, svg); tx.textContent = w;
+  });
+  return { svg, y };
+}
+
+function lineChart(id, series, yMax, yMin, ticks, fmt, tipHtml, endLabels) {
+  const c = document.getElementById(id), tip = tipFor(c);
+  const { svg, y } = scaffold(c, yMax, yMin, ticks, fmt);
+  svg.setAttribute('aria-label', series.map(s => s.name).join(' and ') + ' by week');
+  const cross = el('line', { y1: M.t, y2: M.t + ph, stroke: css('--axis'), 'stroke-width': 1, visibility: 'hidden' }, svg);
+  series.forEach(s => {
+    const d = s.data.map((v, i) => (i ? 'L' : 'M') + x(i) + ' ' + y(v)).join(' ');
+    el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    s.data.forEach((v, i) => el('circle', { cx: x(i), cy: y(v), r: 4, fill: s.color, stroke: css('--surface-1'), 'stroke-width': 2 }, svg));
+    if (endLabels) {
+      const last = s.data.length - 1;
+      const t = el('text', { x: x(last) + 12, y: y(s.data[last]) + 4, class: 'val' }, svg);
+      t.textContent = s.name;
+    }
+  });
+  const colW = pw / weeks.length;
+  weeks.forEach((w, i) => {
+    const r = el('rect', { x: x(i) - colW / 2, y: M.t, width: colW, height: ph, fill: 'transparent' }, svg);
+    r.addEventListener('mousemove', e => {
+      cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+      showTip(tip, c, e, tipHtml(i));
+    });
+    r.addEventListener('mouseleave', () => { cross.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+  });
+}
+
+function stackChart(id) {
+  const c = document.getElementById(id), tip = tipFor(c);
+  const { svg, y } = scaffold(c, 140, 0, [0, 35, 70, 105, 140], v => v);
+  svg.setAttribute('aria-label', 'Weekly crashes by group');
+  const layers = [
+    { name: 'Foreground service', data: fgs, color: css('--series-1') },
+    { name: 'Intune / MAM group', data: mam, color: css('--series-2') },
+    { name: 'Other', data: other, color: css('--series-3') },
+  ];
+  const bw = Math.min(56, (pw / weeks.length) * 0.55);
+  weeks.forEach((w, i) => {
+    let base = 0;
+    layers.forEach((l, k) => {
+      const v = l.data[i]; if (!v) return;
+      const y0 = y(base), y1 = y(base + v), gap = 2;
+      const h = Math.max(1, y0 - y1 - (base ? gap : 0));
+      const top = k === layers.length - 1 || layers.slice(k + 1).every(n => !n.data[i]);
+      const r = el('rect', { x: x(i) - bw / 2, y: y1, width: bw, height: h, fill: l.color, rx: top ? 4 : 0 }, svg);
+      base += v;
+    });
+    const tt = el('text', { x: x(i), y: y(total[i]) - 6, 'text-anchor': 'middle', class: 'val' }, svg);
+    tt.textContent = total[i];
+    const colW = pw / weeks.length;
+    const hit = el('rect', { x: x(i) - colW / 2, y: M.t, width: colW, height: ph, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', e => showTip(tip, c, e,
+      `<b>${ranges[i]}</b>` + layers.map(l => `<div><i style="background:${l.color}"></i>${l.name}: ${l.data[i]}</div>`).join('') +
+      `<div>Total: ${total[i]} crashes, ${crashUsers[i]} users</div>`));
+    hit.addEventListener('mouseleave', () => tip.style.display = 'none');
+  });
+}
+
+function draw() {
+  ['c1', 'c2', 'c3'].forEach(id => document.getElementById(id).innerHTML = '');
+  lineChart('c1',
+    [{ name: 'Foreground service', data: fgs, color: css('--series-1') },
+     { name: 'Intune / MAM', data: mam, color: css('--series-2') }],
+    120, 0, [0, 30, 60, 90, 120], v => v,
+    i => `<b>${ranges[i]}</b>` +
+      `<div><i style="background:${css('--series-1')}"></i>Foreground service: ${fgs[i]} events, ${fgsUsers[i]} users</div>` +
+      `<div><i style="background:${css('--series-2')}"></i>Intune / MAM: ${mam[i]} events</div>`, true);
+  stackChart('c2');
+  lineChart('c3',
+    [{ name: 'Crash-free users', data: cfu, color: css('--series-1') }],
+    100, 96, [96, 97, 98, 99, 100], v => v + '%',
+    i => `<b>${ranges[i]}</b><div>Crash-free users: ${cfu[i]}%</div><div>Crash-free sessions: ${cfs[i]}%</div><div>${crashUsers[i]} users crashed</div>`, false);
+}
+
+const tbl = document.getElementById('tbl');
+tbl.innerHTML = '<tr><th>Week</th><th>Total crashes</th><th>Users crashed</th><th>Foreground service</th><th>FGS users</th><th>MAM group</th><th>Other</th><th>Crash-free users</th><th>Crash-free sessions</th></tr>' +
+  weeks.map((w, i) => `<tr><td>${ranges[i]}</td><td>${total[i]}</td><td>${crashUsers[i]}</td><td>${fgs[i]}</td><td>${fgsUsers[i]}</td><td>${mam[i]}</td><td>${other[i]}</td><td>${cfu[i]}%</td><td>${cfs[i]}%</td></tr>`).join('') +
+  `<tr><td><b>Six weeks</b></td><td><b>360</b></td><td><b>239</b></td><td><b>122</b></td><td><b>70</b></td><td><b>186</b></td><td><b>52</b></td><td></td><td></td></tr>`;
+
+const base = 'https://console.firebase.google.com/u/0/project/athelas-scribe-mobile/crashlytics/app/android:com.athelas.scribe/issues?time=';
+const tail = '&types=crash&state=all&tag=all&sort=eventCount';
+const linkList = [
+  ['Six weeks, Aug 31 – Oct 11', '1788134400000:1791763199000'],
+  ['Aug 31 – Sep 6', '1788134400000:1788739199000'],
+  ['Sep 7 – 13', '1788739200000:1789343999000'],
+  ['Sep 14 – 20', '1789344000000:1789948799000'],
+  ['Sep 21 – 27', '1789948800000:1790553599000'],
+  ['Sep 28 – Oct 4', '1790553600000:1791158399000'],
+  ['Oct 5 – 11', '1791158400000:1791763199000'],
+];
+document.getElementById('links').innerHTML = linkList.map(([t, r]) => `<li><a href="${base + r + tail}" target="_blank" rel="noopener">${t}</a></li>`).join('');
+
+document.getElementById('theme').addEventListener('click', () => {
+  const de = document.documentElement;
+  const dark = de.dataset.theme ? de.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  de.dataset.theme = dark ? 'light' : 'dark';
+  draw();
+});
+draw();
+</script>
+</body>
+</html>

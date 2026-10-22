@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM-20423: Incomplete Scribe, insufficient transcript</title>
+<style>
+  :root { --fg:#1f2430; --muted:#5b6475; --line:#dde1e8; --bg:#fff; --soft:#f5f7fa; --accent:#1d4ed8; --warn:#b45309; --bad:#b91c1c; --ok:#15803d; }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); margin: 0; }
+  main { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 40px 0 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 22px 0 6px; }
+  p, ul, ol { margin: 8px 0; }
+  li { margin: 3px 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .callout { background: var(--soft); border-left: 4px solid var(--accent); padding: 12px 16px; border-radius: 4px; margin: 14px 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  code { background: var(--soft); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .tag.ok { background: #dcfce7; color: var(--ok); }
+  .tag.bad { background: #fee2e2; color: var(--bad); }
+  .tag.warn { background: #fef3c7; color: var(--warn); }
+  .tag.gray { background: #e5e7eb; color: #374151; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>LLM-20423: Incomplete Scribe with insufficient transcript information</h1>
+<p class="meta">Investigation report &middot; 2026-10-15 &middot; Scribe 22715665 (account 308098, iOS 3.40.1+3) &middot; All times UTC</p>
+
+<div class="callout">
+  <strong>Summary.</strong> The iPhone recorded 173.9 s of digital silence from a USB audio input (Jieli Technology USB Composite Device).
+  The app was in the background for almost the whole recording, so the "Audio is low" toast could not appear, and the visit was ended 1.8 s after the user returned.
+  The backend received the full file intact and correctly reported "no speech detected". The failure is on the capture side; the pipeline behaved correctly.
+  The same silent-start signature appeared on the same device in one other recording, where the user paused and resumed and recovered.
+</div>
+
+<h2>1. What happened</h2>
+<table>
+  <tr><th>Time (10-13)</th><th>Event</th><th>Source</th></tr>
+  <tr><td>18:18:34</td><td>Recording starts. Input is the Jieli USB device, picked as the default (<code>provided: null</code>). 48 kHz.</td><td>GCP client logs</td></tr>
+  <tr><td>18:18:36</td><td>App goes to background (2.5 s after start).</td><td>Client logs / events</td></tr>
+  <tr><td>18:18:44 &ndash; 18:21:18</td><td><code>Low audio detected</code> logged 10 times (about every 14 s). Toast suppressed because the app is not resumed.</td><td>GCP client logs</td></tr>
+  <tr><td>18:21:26</td><td>App returns to foreground.</td><td>Client logs / events</td></tr>
+  <tr><td>18:21:28</td><td>Recording ended (1.8 s after returning). Stats: avg = max = min = -120 dB over 4,342 samples; mute threshold -150 dB.</td><td>Client logs / events</td></tr>
+  <tr><td>18:21:29 &ndash; 32</td><td>Single upload (0.6 s), transcription finishes about 3 s later: "no speech detected". Scribe marked INCOMPLETE, empty transcript.</td><td>Events, Normandy DB</td></tr>
+</table>
+<p>The scribe row was pre-created on 10-11 05:04 by the nightly job (daily post-note-generation callbacks on 10-11, 10-12, 10-13). That is unrelated to the recording.</p>
+
+<h2>2. Evidence that the audio was silent</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Audio file from GCP</td><td>opus, 48 kHz, mono, 173.92 s, 91,624 bytes (identical to the device's file), 4.2 kbps</td></tr>
+  <tr><td><code>ffmpeg volumedetect</code></td><td>mean = max = -91.0 dB; all 8,347,848 samples in one bin. -91 dB is the 16-bit floor, so every sample is zero or at the floor.</td></tr>
+  <tr><td>Client amplitude stats</td><td>-120 dB for every one of 4,342 samples (constant; real noise would vary)</td></tr>
+  <tr><td>Backend</td><td><code>error_message</code> = "There was no speech detected in the audio."; <code>task_status</code> = INCOMPLETE</td></tr>
+</table>
+<p>This rules out truncation, a dropped upload, a preprocessing problem, and a faulty amplitude meter. The input delivered zeros from the first sample to the last.</p>
+
+<h2>3. Why the user was never warned</h2>
+<ul>
+  <li><strong>Mute detector never fired.</strong> A frame counts as muted only at or below -150 dB (<code>recorder_configs.dart</code>, <code>recorder.dart:291</code>). The signal read -120 dB, so no muted frame was counted and no <code>MUTED_RECORDING</code> event exists.</li>
+  <li><strong>Low-audio detector did fire, but the toast was suppressed.</strong> <code>recording_screen.dart:1074-1133</code> shows the toast only when the app lifecycle is <code>resumed</code>; the event is logged either way. The app was paused from 18:18:36 to 18:21:26.</li>
+  <li><strong>No time to notice in the foreground.</strong> The first 2.4 s was too short for the low-volume timer, and the last 1.8 s after returning was too short for a toast.</li>
+  <li><strong>No check at stop or upload.</strong> Audio validation only checks that the file exists with a size above zero (<code>upload_error_handler_service.dart:154-165</code>, result <code>SOME_PARTS_VALID</code>).</li>
+  <li><strong>Not memory.</strong> <code>lowMemory: false</code> throughout; no memory-related errors near the recording.</li>
+</ul>
+
+<h2>4. Input source</h2>
+<p>Not in <code>scribe_events</code> or Sentry. It was found in the app's own logs in GCP project <code>athelas-scribe-mobile</code> (filter by <code>labels.recording_uuid</code>): <code>AppleUSBAudioEngine:Jieli Technology:USB Composite Device</code>. Jieli is a chip maker, so this is probably an off-brand USB audio device or adapter; the product is unknown. No route change, device change, interruption, disconnect, or "Mic muted" log appears during the recording.</p>
+
+<h2>5. Other recordings by this user (9-15 to 10-14)</h2>
+<table>
+  <tr><th>Input</th><th class="num">Recordings</th><th>Silent (flat -120 dB) long segments</th></tr>
+  <tr><td>Built-in mic</td><td class="num">108</td><td>0 of 224 segments</td></tr>
+  <tr><td>Hollyland wireless mic</td><td class="num">12</td><td>0 of 34 segments</td></tr>
+  <tr><td>Jieli USB</td><td class="num">39</td><td>2 recordings confirmed (this ticket and #3 below)</td></tr>
+  <tr><td>No device specified (system default)</td><td class="num">14</td><td>1 recording (#2 below)</td></tr>
+</table>
+<p>When the Jieli device delivers real signal it looks normal: 96 segments, median -33.6 dB, range -56 to -20.6 dB. Of the 39 Jieli recordings, 38 are SYNCED and 1 is INCOMPLETE (this ticket).</p>
+
+<h3>The three silent segments</h3>
+<table>
+  <tr><th>#</th><th>Recording</th><th>Silent segment</th><th>Device (per segment log)</th><th>After</th><th>Result</th></tr>
+  <tr><td>1</td><td>22715665 (this ticket), 10-13 18:18</td><td>whole recording, 174 s, background</td><td>Jieli</td><td>no restart</td><td><span class="tag bad">INCOMPLETE</span></td></tr>
+  <tr><td>2</td><td><code>e03093853&hellip;</code>, 10-13 18:24 (3 min later)</td><td>first 9 s</td><td>none specified (system default)</td><td>paused, resumed after 38 s; real audio (-53 dB)</td><td><span class="tag ok">SYNCED</span></td></tr>
+  <tr><td>3</td><td><code>f5b31593&hellip;</code>, 10-14 15:21</td><td>first 20 s, foreground</td><td>Jieli</td><td>paused, resumed after 104 s; real audio (-39.6, -30.9 dB)</td><td><span class="tag ok">SYNCED</span></td></tr>
+</table>
+<div class="callout warn">
+  <strong>Corrections made during the investigation.</strong> #2 was first attributed to the Jieli device because device was mapped per recording, not per segment. Its silent segment actually used no explicit device, so it is not confirmed as Jieli. #3 is a confirmed second Jieli case.
+  That user triggered the pause and resume in #2 and #3 is an inference: the gaps (38 s, 104 s) are human timescale, there is no device-change log, and the automatic device-change path restarts within a second. The logs do not record which button was pressed.
+</div>
+
+<h2>6. Overall incomplete-scribe rates</h2>
+<p>Prod Postgres replica, all device types, by week of <code>created_at</code>. Includes scribes that never had audio, so the rate among recorded scribes is higher. Rates are count divided by total scribes that week. The partial week of 10-12 is excluded.</p>
+<table>
+  <tr><th>Week of</th><th class="num">Scribes</th><th class="num">INCOMPLETE</th><th class="num">Rate</th><th class="num">"No speech"</th><th class="num">Rate</th><th class="num">Share of INCOMPLETE</th></tr>
+  <tr><td>08-24</td><td class="num">405,769</td><td class="num">1,091</td><td class="num">0.27%</td><td class="num">703</td><td class="num">0.17%</td><td class="num">64.4%</td></tr>
+  <tr><td>08-31</td><td class="num">410,137</td><td class="num">1,177</td><td class="num">0.29%</td><td class="num">785</td><td class="num">0.19%</td><td class="num">66.7%</td></tr>
+  <tr><td>09-07</td><td class="num">369,135</td><td class="num">1,022</td><td class="num">0.28%</td><td class="num">647</td><td class="num">0.18%</td><td class="num">63.3%</td></tr>
+  <tr><td>09-14</td><td class="num">426,435</td><td class="num">1,232</td><td class="num">0.29%</td><td class="num">795</td><td class="num">0.19%</td><td class="num">64.5%</td></tr>
+  <tr><td>09-21</td><td class="num">428,485</td><td class="num">1,016</td><td class="num">0.24%</td><td class="num">634</td><td class="num">0.15%</td><td class="num">62.4%</td></tr>
+  <tr><td>09-28</td><td class="num">432,403</td><td class="num">1,063</td><td class="num">0.25%</td><td class="num">658</td><td class="num">0.15%</td><td class="num">61.9%</td></tr>
+  <tr><td>10-05</td><td class="num">434,665</td><td class="num">1,040</td><td class="num">0.24%</td><td class="num">622</td><td class="num">0.14%</td><td class="num">59.8%</td></tr>
+</table>
+<p>No spike: the rate is flat to slightly down. About 650&ndash;800 "no speech" scribes a week is a steady background rate. The share of INCOMPLETE that is "no speech" drifts from about 64&ndash;67% to 59.8% because the "no speech" count fell while other INCOMPLETE reasons stayed flat (about 375&ndash;440 a week). "No speech" counts any empty-audio result (silent input, muted mic, no one speaking), so this query cannot isolate this specific cause.</p>
+
+<h2>7. Other findings</h2>
+<ul>
+  <li><strong>Event delivery.</strong> 98 "connection refused" errors posting to <code>api.scribe.athelas.com</code> (local ports such as 64371) occurred during the recording. This may explain why <code>LOW_AUDIO_DETECTED</code> events are missing from <code>scribe_events</code>. Unverified.</li>
+  <li><strong>Sentry.</strong> Nothing relates to this recording. The 13 errors for the user in the last 7 days, and the 31 groups over 90 days, are all hours to months away from 10-13 18:18&ndash;18:22.</li>
+  <li><strong>Account history.</strong> Of the 100 most recent scribes for account 308098 since 09-15, this is the only INCOMPLETE one; the rest are SYNCED or PRE_CHARTED (no audio).</li>
+</ul>
+
+<h2>8. Open questions</h2>
+<ul>
+  <li><strong>Why the device goes silent.</strong> A hardware mute on the device and a USB audio-session fault are both possible. There is no evidence for either.</li>
+  <li><strong>The clinician's actual setup</strong> and whether they were speaking. Needs Danielle, Shailee or the user.</li>
+  <li><strong>The 2 s shown in the UI</strong> against 173 s in the data. The client's own cache recorded 173.875 s ("3 min"). The 1.8 s after returning to the foreground matches the figure, but that is a correlation, not a confirmed explanation.</li>
+  <li><strong>How the failing starts differ from the working ones</strong> (time since the previous recording, USB reconnects, pause and resume patterns). Not yet compared.</li>
+  <li><strong>Whether this is specific to this user.</strong> Not checked across other users on the same device.</li>
+</ul>
+
+<h2>9. Sources and limits</h2>
+<ul>
+  <li><strong>Normandy prod read replica:</strong> <code>scribe</code> rows, weekly counts, account history. Read-only.</li>
+  <li><strong>GCP Cloud Logging</strong> (<code>athelas-scribe-mobile</code>): client recorder, device, lifecycle, amplitude and low-audio logs, scoped by <code>recording_uuid</code> and <code>user_id</code>.</li>
+  <li><strong>Scribe events export</strong> (run by the user): server-side and client journey events for this scribe. The <code>scribe_events</code> StarRocks mirror has a data pipeline issue and was not queried.</li>
+  <li><strong>Audio file</strong> from GCP, analyzed locally with <code>ffprobe</code> and <code>ffmpeg volumedetect</code>.</li>
+  <li><strong>Sentry</strong> (<code>athelas-monitoring</code>): no relevant events.</li>
+  <li>Sample sizes for the device comparison are small (one user, about 2 days of Jieli use), so no rate is claimed.</li>
+</ul>
+
+</main>
+</body>
+</html>

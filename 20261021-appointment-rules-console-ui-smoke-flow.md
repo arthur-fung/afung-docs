@@ -6,12 +6,12 @@ All parameters below are for the **staging** account `arthur.fung@commure.com` (
 
 ### PRs
 
-Status as of 2026-10-22. The open PRs are stacked, so each branch includes the ones above it: #60069 → #60070 → #60355 → #60358 → #60362, and #60070 → #60372 → #60385. To test everything except my rules, check out #60362.
+Status as of 2026-10-22 18:00 PDT. Merged PRs are on `main`. The open PRs are stacked, so each branch includes the ones above it: #60070 → #60355 → #60358 → #60362, and #60070 → #60372 → #60385. To test everything except my rules, check out #60362.
 
 | PR | Endpoints | Sections | Status |
 |---|---|---|---|
 | [#60065](https://github.com/getathelas/normandy/pull/60065) | `GET /admin_panel/appointment_rules` | [List rules](#list-rules) | Merged 2026-10-22 |
-| [#60069](https://github.com/getathelas/normandy/pull/60069) | `GET …/providers`, `GET …/template_coverage` | [Providers](#providers), [Coverage](#coverage) | Open, approved |
+| [#60069](https://github.com/getathelas/normandy/pull/60069) | `GET …/providers`, `GET …/template_coverage` | [Providers](#providers), [Coverage](#coverage) | Merged 2026-10-22 |
 | [#60070](https://github.com/getathelas/normandy/pull/60070) | `POST /admin_panel/appointment_rules` | [Create](#create) | Open, awaiting review |
 | [#60355](https://github.com/getathelas/normandy/pull/60355) | `PATCH …/{template_id}`, `PATCH …/{template_id}/providers` | [Edit](#edit), [Move](#move) | Open, awaiting review |
 | [#60358](https://github.com/getathelas/normandy/pull/60358) | `PUT …/{template_id}/default`, `DELETE …/{template_id}` | [Set default](#set-default), [Delete](#delete), [Cleanup](#cleanup) | Open, awaiting review |

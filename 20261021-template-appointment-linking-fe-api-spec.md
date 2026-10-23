@@ -10,18 +10,18 @@ Design: [`20261008-template-appointment-linking-design.md`](20261008-template-ap
 
 ## 0. Availability
 
-| Endpoints | PR | Status (2026-10-21) |
+| Endpoints | PR | Status (2026-10-23) |
 |---|---|---|
-| Visit list / pre-chart resolver (§7.1–7.2) | #60062 (PR 4) | Merged |
-| `GET /appointment_rules` | #60065 (PR 5) | Open |
-| `GET /providers`, `GET /template_coverage` | #60069 (PR 6) | Open |
-| `POST /appointment_rules` | #60070 (PR 7) | Open |
-| `PATCH /{template_id}`, `PATCH /{template_id}/providers` | #60355 (PR 8) | Open |
-| `PUT /{template_id}/default`, `DELETE /{template_id}` | #60358 (PR 9) | Open |
-| `GET /missing`, `providers_without_template` actions | #60362 (PR 10) | Open |
-| v0 route guards (§7.3) | #60064 (PR 3) | Open |
-| `GET /appointment_rules/me` | #60372 (PR 12) | Open |
-| `PUT /appointment_rules/me` | #60385 (PR 13) | Open |
+| Visit list / pre-chart resolver (§7.1–7.2) | [#60062](https://github.com/getathelas/normandy/pull/60062) (PR 4) | Merged 2026-10-21 |
+| `GET /appointment_rules` | [#60065](https://github.com/getathelas/normandy/pull/60065) (PR 5) | Merged 2026-10-22 |
+| `GET /providers`, `GET /template_coverage` | [#60069](https://github.com/getathelas/normandy/pull/60069) (PR 6) | Merged 2026-10-22 |
+| `POST /appointment_rules` | [#60070](https://github.com/getathelas/normandy/pull/60070) (PR 7) | Open, awaiting review |
+| `PATCH /{template_id}`, `PATCH /{template_id}/providers` | [#60355](https://github.com/getathelas/normandy/pull/60355) (PR 8) | Open, awaiting review |
+| `PUT /{template_id}/default`, `DELETE /{template_id}` | [#60358](https://github.com/getathelas/normandy/pull/60358) (PR 9) | Open, awaiting review |
+| `GET /missing`, `providers_without_template` actions | [#60362](https://github.com/getathelas/normandy/pull/60362) (PR 10) | Open, awaiting review |
+| v0 route guards (§7.3) | [#60064](https://github.com/getathelas/normandy/pull/60064) (PR 3) | Open, awaiting review |
+| `GET /appointment_rules/me` | [#60372](https://github.com/getathelas/normandy/pull/60372) (PR 12) | Open, awaiting review |
+| `PUT /appointment_rules/me` | [#60385](https://github.com/getathelas/normandy/pull/60385) (PR 13) | Open, awaiting review |
 
 Both feature flags are off everywhere. Until a PR is merged and deployed, its endpoint doesn't exist on staging.
 

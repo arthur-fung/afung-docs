@@ -47,6 +47,7 @@ layout: null
       <th>UI</th>
       <th>Spec (v0)</th>
       <th>Spec (v2)</th>
+      <th>v2 PR</th>
       <th>Gap</th>
       <th>Missing in v2 API</th>
     </tr>
@@ -57,6 +58,7 @@ layout: null
       <td>Rules list, one card per type</td>
       <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a></td>
       <td>v0 has one mapping per type, so it can't show several rules per type, <code>template_deleted</code> or <code>providers_missing_template_count</code>. v2 returns <code>rules[]</code> per type.</td>
       <td>—</td>
     </tr>
@@ -65,6 +67,7 @@ layout: null
       <td>Default badge</td>
       <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a></td>
       <td>Badges the first rule (<code>i == 0</code>). A type can have rules and no default; use <code>is_default</code>.</td>
       <td>—</td>
     </tr>
@@ -73,6 +76,7 @@ layout: null
       <td>Provider count on a rule row</td>
       <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a></td>
       <td>Counts accounts that have the template (<code>templateToProvidersMapProvider</code>), not providers the rule covers. Use <code>provider_count</code>.</td>
       <td>—</td>
     </tr>
@@ -81,6 +85,7 @@ layout: null
       <td>"Missing mapping" banner</td>
       <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code><br><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a></td>
       <td>Worked out in the app from the default template only, and its appointment count is unmapped types. Use <code>missing_rules</code>: types with a rule some provider can't use.</td>
       <td>—</td>
     </tr>
@@ -89,6 +94,7 @@ layout: null
       <td>All / N Missing Mapping toggle</td>
       <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a></td>
       <td>— (types with <code>rules: []</code>, counted in the app)</td>
       <td>—</td>
     </tr>
@@ -97,12 +103,14 @@ layout: null
       <td>Facility chip</td>
       <td>—</td>
       <td><code>GET /v1/scribe/admin_panel/provider_groups/mapped_facilities_filter_options</code><br><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a></td>
       <td>Stub (<code>onTap: () {}</code>). Send <code>facility_id</code> on the reads.</td>
       <td>—</td>
     </tr>
     <tr>
       <td class="num">7</td><td class="check">✅</td><td class="check">✅</td>
       <td>Search</td>
+      <td>—</td>
       <td>—</td>
       <td>—</td>
       <td>— (client-side; the list isn't paged)</td>
@@ -115,12 +123,14 @@ layout: null
       <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
       <td>—</td>
       <td>—</td>
+      <td>—</td>
     </tr>
     <tr>
       <td class="num">9</td><td class="check">⚠️</td><td class="check">✅</td>
       <td>Side panel provider list</td>
       <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules/providers</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60069">#60069</a></td>
       <td>Shows accounts that have the template, with "+N more" paged in the app. v2 returns the rule's members, with server search, pages of 5 then 20, <code>has_template</code> and <code>is_explicit</code>.</td>
       <td>—</td>
     </tr>
@@ -129,6 +139,7 @@ layout: null
       <td>Set as default</td>
       <td>—</td>
       <td><code>PUT /v1/scribe/admin_panel/appointment_rules/{template_id}/default</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60358">#60358</a></td>
       <td>TODO (local state only)</td>
       <td>—</td>
     </tr>
@@ -137,6 +148,7 @@ layout: null
       <td>Change template</td>
       <td>—</td>
       <td><code>PATCH /v1/scribe/admin_panel/appointment_rules/{template_id}</code><br><code>GET /v1/scribe/admin_panel/appointment_rules/template_coverage</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60355">#60355</a><br><a href="https://github.com/getathelas/normandy/pull/60069">#60069</a></td>
       <td>TODO. Send <code>new_template_id</code>; preview with <code>template_coverage</code>. Merge and "joins the default" cases not handled.</td>
       <td>—</td>
     </tr>
@@ -145,6 +157,7 @@ layout: null
       <td>Move provider</td>
       <td>—</td>
       <td><code>PATCH /v1/scribe/admin_panel/appointment_rules/{template_id}/providers</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60355">#60355</a><br><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a></td>
       <td>TODO. One call with <code>provider_ids</code> (one or many) + <code>providers_without_template</code>; the target must be an existing rule of the type. Step 1 lists every site template instead of the type's other rules. Drop step 2 (a template change on the rule being left, not part of a move). No <code>providers_without_template</code> choice. No confirm before moving a rule's last provider (that rule is then deleted).</td>
       <td>—</td>
     </tr>
@@ -153,6 +166,7 @@ layout: null
       <td>Delete rule</td>
       <td>—</td>
       <td><code>DELETE /v1/scribe/admin_panel/appointment_rules/{template_id}</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60358">#60358</a><br><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a></td>
       <td>TODO. Inputs match: <code>new_default_template_id</code> + <code>providers_without_template</code> (<code>ADD_TEMPLATE</code> / <code>PERSONAL_RULES</code>).</td>
       <td>—</td>
     </tr>
@@ -161,6 +175,7 @@ layout: null
       <td>Add rule, Apply to All</td>
       <td>—</td>
       <td><code>POST /v1/scribe/admin_panel/appointment_rules</code><br><code>GET /v1/scribe/admin_panel/appointment_rules/template_coverage</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60070">#60070</a><br><a href="https://github.com/getathelas/normandy/pull/60069">#60069</a><br><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a></td>
       <td>TODO. <code>apply_to: ALL</code>, <code>is_default</code> + <code>providers_without_template</code> (who lacks the template comes from <code>template_coverage</code>). Two dialogs for one flow ("Add rule" when the type has rules, "Add template" when it has none); merge into one, with Set as default pre-checked when the type has no rules, always asking about providers without the template.</td>
       <td>—</td>
     </tr>
@@ -169,6 +184,7 @@ layout: null
       <td>Add rule, Select providers</td>
       <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules/providers</code><br><code>POST /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a><br><a href="https://github.com/getathelas/normandy/pull/60070">#60070</a></td>
       <td>TODO. Picker lists accounts keyed by <code>scribeAccountId</code>; it should load from <code>GET /providers</code> without <code>appointment_type</code> and key by <code>provider_id</code>. Save with <code>apply_to: SELECTED</code>, <code>provider_ids</code>, <code>is_default</code> + <code>providers_without_template</code>.</td>
       <td class="gap">❗ Planned in PR 10 (#60362): <code>appointment_type</code> becomes optional on <code>GET /providers</code></td>
     </tr>
@@ -177,6 +193,7 @@ layout: null
       <td>Review missing</td>
       <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
       <td><code>GET /v1/scribe/admin_panel/appointment_rules/missing</code><br><code>PATCH /v1/scribe/admin_panel/appointment_rules/{template_id}</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a><br><a href="https://github.com/getathelas/normandy/pull/60355">#60355</a></td>
       <td>Worked out in the app (default template only); TODO on Finish. v2: <code>GET /missing</code> covers every rule, then one <code>PATCH</code> per group with only <code>providers_without_template</code>. Offer only "Create personal rule" when the type has no default.</td>
       <td>—</td>
     </tr>
@@ -185,12 +202,14 @@ layout: null
       <td>Errors</td>
       <td>—</td>
       <td>—</td>
+      <td>—</td>
       <td>Not handled: 403 (feature off), 404 (rule gone), 409 (conflict, refetch), 500 "could not be loaded" (saved: refetch, don't retry).</td>
       <td>—</td>
     </tr>
     <tr>
       <td class="num">17</td><td class="check">⚠️</td><td class="check">✅</td>
       <td>Tab gate</td>
+      <td>—</td>
       <td>—</td>
       <td>—</td>
       <td>Gated on <code>scribeAutoSelectTemplate</code> (v0). Use <code>scribe_appointment_rules</code>; every v2 route returns 403 without it.</td>

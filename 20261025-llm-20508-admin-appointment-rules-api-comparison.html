@@ -1,0 +1,220 @@
+---
+title: "LLM-20508 — Admin Appointment Rules: Prokash's branch vs v2 API spec"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LLM-20508 — Admin Appointment Rules: Prokash's branch vs v2 API spec</title>
+<style>
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; color: #1f2328; max-width: 1500px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 16px; margin-top: 32px; }
+  .meta { color: #59636e; margin-bottom: 20px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #d1d9e0; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; position: sticky; top: 0; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  td.check { text-align: center; font-size: 16px; white-space: nowrap; }
+  td.num { color: #59636e; text-align: right; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: #eff1f3; padding: 1px 4px; border-radius: 4px; }
+  .legend span { margin-right: 18px; }
+  .gap { color: #9a3412; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>LLM-20508 — Admin Appointment Rules: Prokash's branch vs v2 API spec</h1>
+<div class="meta">
+  Branch <code>prokashsarkar/llm-20508-featfe-admin-panel-appointment-rules-screen</code> at <code>f1caccb35</code>
+  · Spec <code>normandy/docs/20261021-template-appointment-linking-fe-api-spec.md</code> · 2026-10-25
+</div>
+
+<p class="legend">
+  <span>✅ works as is (v0 is fine)</span>
+  <span>⚠️ wired, but shows the wrong data or uses the wrong check</span>
+  <span>❌ not wired (TODO or stub)</span>
+  <span class="gap">❗ the v2 API has no way to do this</span>
+</p>
+
+<p><b>Summary:</b> ✅ 3 · ⚠️ 6 · ❌ 9 · ❗ 2 v2 API gaps</p>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Check</th>
+      <th>UI (Prokash)</th>
+      <th>Uses now</th>
+      <th>Spec (v2)</th>
+      <th>Gap</th>
+      <th>Missing in v2 API</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="num">1</td><td class="check">⚠️</td>
+      <td>Rules list, one card per type</td>
+      <td>v0 <code>GET /v1/scribe/admin_panel/appointment_type_templates</code> through the v0 <code>AppointmentRulesViewModel</code></td>
+      <td>§3.1 <code>GET /appointment_rules</code> (<code>listRules</code>), <code>rules[]</code> per type</td>
+      <td>v0 has one mapping per type, so it can't show several rules per type, <code>template_deleted</code> or <code>providers_missing_template_count</code></td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">2</td><td class="check">⚠️</td>
+      <td>Default badge</td>
+      <td>First rule in the list (<code>i == 0</code>)</td>
+      <td><code>is_default</code> on each rule</td>
+      <td>A type can have rules and no default; the first rule is then badged by mistake</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">3</td><td class="check">⚠️</td>
+      <td>Provider count on a rule row</td>
+      <td>Accounts that have the template (<code>templateToProvidersMapProvider</code>)</td>
+      <td><code>provider_count</code>: providers the rule covers</td>
+      <td>Different number</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">4</td><td class="check">⚠️</td>
+      <td>"Missing mapping" banner</td>
+      <td>Worked out in the app from the default template only; its appointment count is unmapped types</td>
+      <td><code>missing_rules</code> (§2): types with a rule some provider can't use</td>
+      <td>Wrong counts; mixes two concepts</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">5</td><td class="check">✅</td>
+      <td>All / N Missing Mapping toggle</td>
+      <td>Counts types with no rules, in the app</td>
+      <td>Filter on <code>rules: []</code>, in the app (§3.1)</td>
+      <td>—</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">6</td><td class="check">❌</td>
+      <td>Facility chip</td>
+      <td>Stub (<code>onTap: () {}</code>)</td>
+      <td><code>facility_id</code> on reads; options from <code>GET …/provider_groups/mapped_facilities_filter_options</code> (§3.5)</td>
+      <td>Not built</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">7</td><td class="check">✅</td>
+      <td>Search</td>
+      <td>Client-side in the v0 view model</td>
+      <td>Client-side; the list isn't paged</td>
+      <td>—</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">8</td><td class="check">✅</td>
+      <td>Template dropdowns</td>
+      <td><code>templateOptions</code> from <code>site_user_template_assignments</code></td>
+      <td>Same endpoint (§3.5)</td>
+      <td>—</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">9</td><td class="check">⚠️</td>
+      <td>Side panel provider list</td>
+      <td>Accounts that have the template; "+N more" paged in the app</td>
+      <td>§3.2 <code>GET /providers</code> (<code>listProviders</code>): the rule's members, server search, pages of 5 then 20, <code>has_template</code>, <code>is_explicit</code></td>
+      <td>Shows the wrong set of people</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">10</td><td class="check">❌</td>
+      <td>Set as default</td>
+      <td>TODO (local state only)</td>
+      <td>§5.2 <code>PUT /{template_id}/default</code></td>
+      <td>Not wired</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">11</td><td class="check">❌</td>
+      <td>Change template</td>
+      <td>TODO; collects a new template id</td>
+      <td>§5.3 <code>PATCH /{template_id}</code> with <code>new_template_id</code>; preview from §3.3 <code>template_coverage</code></td>
+      <td>Not wired; merge and "joins the default" cases not handled</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">12</td><td class="check">❌</td>
+      <td>Move provider (2 steps)</td>
+      <td>TODO. Step 1 picks the target rule. Step 2 asks "N providers currently use this template. Which template should they use instead?"</td>
+      <td>§5.4 <code>PATCH /{target}/providers</code> with <code>provider_ids</code> (+ <code>providers_without_template</code>). Step 2 would be a separate §5.3 <code>PATCH /{source}</code> with <code>new_template_id</code></td>
+      <td>Not wired; no <code>providers_without_template</code> choice; no "last provider" confirm (§5.4 says the FE should confirm, since the source rule is then deleted)</td>
+      <td class="gap">❗ No single call moves a provider and re-templates the source rule. Two writes, not atomic: if the second fails, the move is already saved</td>
+    </tr>
+    <tr>
+      <td class="num">13</td><td class="check">❌</td>
+      <td>Delete rule</td>
+      <td>TODO; collects a new default template and a missing-provider action ("Add to account" / "Use their personal default template")</td>
+      <td>§5.5 <code>DELETE /{template_id}</code> with <code>new_default_template_id</code> + <code>providers_without_template</code> (<code>ADD_TEMPLATE</code> / <code>PERSONAL_RULES</code>)</td>
+      <td>Inputs match; not wired</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">14</td><td class="check">❌</td>
+      <td>Add rule (mapped type)</td>
+      <td>TODO; collects template, All / Select Providers, providers, Set as default</td>
+      <td>§5.1 <code>POST /appointment_rules</code> (<code>apply_to</code>, <code>provider_ids</code>, <code>is_default</code>)</td>
+      <td>Providers keyed by <code>scribeAccountId</code>, not <code>provider_id</code></td>
+      <td class="gap">❗ No endpoint lists every site provider with <code>provider_id</code> for the Select Providers picker</td>
+    </tr>
+    <tr>
+      <td class="num">15</td><td class="check">❌</td>
+      <td>Add template (unmapped type)</td>
+      <td>TODO; who lacks the template is worked out from accounts</td>
+      <td>§5.1 POST + <code>providers_without_template</code>; preview from §3.3 <code>template_coverage</code></td>
+      <td>Coverage should come from the server; same <code>provider_id</code> problem when selecting providers</td>
+      <td class="gap">❗ Same as #14</td>
+    </tr>
+    <tr>
+      <td class="num">16</td><td class="check">❌</td>
+      <td>Review missing</td>
+      <td>Worked out in the app (default template only); TODO on Finish</td>
+      <td>§3.4 <code>GET /missing</code> (every rule), then §5.3 <code>PATCH</code> with only <code>providers_without_template</code> per group</td>
+      <td>Not wired; offer only "Create personal rule" when the type has no default</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">17</td><td class="check">❌</td>
+      <td>Errors</td>
+      <td>None</td>
+      <td>403 (feature off), 404 (rule gone), 409 (conflict, refetch), 500 "could not be loaded" (saved: refetch, don't retry)</td>
+      <td>Not handled</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">18</td><td class="check">⚠️</td>
+      <td>Tab gate</td>
+      <td><code>scribeAutoSelectTemplate</code> (v0)</td>
+      <td><code>scribe_appointment_rules</code>; every route returns 403 without it</td>
+      <td>Wrong flag</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Missing in the v2 API</h2>
+<ol>
+  <li><b>No list of all site providers with <code>provider_id</code>.</b> Every write that takes providers needs <code>provider_id</code>. The only full list the screens have is <code>site_user_template_assignments</code>, which returns <code>scribe_account_id</code>, <code>scribe_account_email</code> and <code>provider_name</code>; the backend joins <code>Provider</code> but doesn't return its id (<code>admin_panel/services.py</code>, <code>get_site_user_template_assignments_service</code>). <code>/providers</code>, <code>/template_coverage</code> and <code>/missing</code> return <code>provider_id</code> but only subsets. A provider can also have more than one scribe account, so keying by account can list someone twice. Smallest fix: add <code>provider_id</code> to each row of <code>site_user_template_assignments</code>.</li>
+  <li><b>No atomic "move and re-template the source rule".</b> Only needed if Move keeps its step 2 (#12).</li>
+</ol>
+
+<h2>Decisions</h2>
+<ol>
+  <li><b>v0 is acceptable.</b> Using v0 doesn't fail a row on its own; the Check column scores behaviour only.</li>
+  <li><b>v2 swap is the plan.</b> Replace the v0 view model with the v2 client (<code>AppointmentRulesV2Repository</code>, already on develop from #6358), and use <code>missing_rules</code> / <code>GET /missing</code> instead of the client-side counts. That fixes rows 1–4, 9 and 16. Anything the screens need that v2 can't provide is listed under "Missing in the v2 API".</li>
+  <li><b>Move, step 2 is a change of template on the source rule.</b> Its copy matches the change-template confirm ("N providers currently use this template. Which template should they use instead?"), so it maps to a second write: §5.3 <code>PATCH /{source}</code> with <code>new_template_id</code>, after §5.4 <code>PATCH /{target}/providers</code>.</li>
+</ol>
+
+<h2>Open question for Prokash</h2>
+<ol>
+  <li><b>Keep Move step 2?</b> The spec's move doesn't need it: the other providers stay on the source rule, and the rule is deleted only if the moved provider was its last one. Keeping it means two non-atomic writes (see "Missing in the v2 API" #2). The spec does ask for a confirm before moving a rule's last provider (§5.4), which the flow doesn't have. Keep step 2, or replace it with that last-provider confirm?</li>
+  <li><b>Move doesn't ask about providers without the target's template.</b> Add the <code>providers_without_template</code> choice (<code>ADD_TEMPLATE</code> / <code>PERSONAL_RULES</code>), as Delete already does.</li>
+</ol>
+</body>
+</html>

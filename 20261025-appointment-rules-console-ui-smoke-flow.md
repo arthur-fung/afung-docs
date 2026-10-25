@@ -6,18 +6,18 @@ All parameters below are for the **staging** account `arthur.fung@commure.com` (
 
 ### PRs
 
-Status as of 2026-10-22 18:00 PDT. Merged PRs are on `main`. The open PRs are stacked, so each branch includes the ones above it: #60070 → #60355 → #60358 → #60362, and #60070 → #60372 → #60385. To test everything except my rules, check out #60362.
+Status as of 2026-10-25. Merged PRs are on `main`. The open PRs are stacked, so each branch includes the ones above it: #60070 → #60355 → #60358 → #60362, and #60070 → #60372 → #60385. To test everything except my rules, check out #60362.
 
 | PR | Endpoints | Sections | Status |
 |---|---|---|---|
 | [#60065](https://github.com/getathelas/normandy/pull/60065) | `GET /admin_panel/appointment_rules` | [List rules](#list-rules) | Merged 2026-10-22 |
 | [#60069](https://github.com/getathelas/normandy/pull/60069) | `GET …/providers`, `GET …/template_coverage` | [Providers](#providers), [Coverage](#coverage) | Merged 2026-10-22 |
-| [#60070](https://github.com/getathelas/normandy/pull/60070) | `POST /admin_panel/appointment_rules` | [Create](#create) | Open, awaiting review |
-| [#60355](https://github.com/getathelas/normandy/pull/60355) | `PATCH …/{template_id}`, `PATCH …/{template_id}/providers` | [Edit](#edit), [Move](#move) | Open, awaiting review |
-| [#60358](https://github.com/getathelas/normandy/pull/60358) | `PUT …/{template_id}/default`, `DELETE …/{template_id}` | [Set default](#set-default), [Delete](#delete), [Cleanup](#cleanup) | Open, awaiting review |
-| [#60362](https://github.com/getathelas/normandy/pull/60362) | `GET …/missing`; `providers_without_template` on create, edit, move, delete | [Missing](#missing) | Open, awaiting review |
-| [#60372](https://github.com/getathelas/normandy/pull/60372) | `GET /v1/scribe/appointment_rules/me` | [My rules](#my-rules) | Open, awaiting review |
-| [#60385](https://github.com/getathelas/normandy/pull/60385) | `PUT /v1/scribe/appointment_rules/me` | [Choose template](#choose-template) | Open, awaiting review |
+| [#60070](https://github.com/getathelas/normandy/pull/60070) | `POST /admin_panel/appointment_rules` | [Create](#create) | Open |
+| [#60355](https://github.com/getathelas/normandy/pull/60355) | `PATCH …/{template_id}`, `PATCH …/{template_id}/providers` | [Edit](#edit), [Move](#move) | Open |
+| [#60358](https://github.com/getathelas/normandy/pull/60358) | `PUT …/{template_id}/default`, `DELETE …/{template_id}` | [Set default](#set-default), [Delete](#delete), [Cleanup](#cleanup) | Open |
+| [#60362](https://github.com/getathelas/normandy/pull/60362) | `GET …/missing`; `providers_without_template` on create, edit, move, delete; `GET …/providers` without `appointment_type` | [Missing](#missing), [Providers](#providers) | Open |
+| [#60372](https://github.com/getathelas/normandy/pull/60372) | `GET /v1/scribe/appointment_rules/me` | [My rules](#my-rules) | Open |
+| [#60385](https://github.com/getathelas/normandy/pull/60385) | `PUT /v1/scribe/appointment_rules/me` | [Choose template](#choose-template) | Open |
 
 Set once:
 
@@ -36,7 +36,7 @@ export OUT_DIR="${OUT_DIR:-./appointment-rules-smoke}"
 mkdir -p "$OUT_DIR"
 ```
 
-Spec: [`normandy/docs/20261021-template-appointment-linking-fe-api-spec.md`](../../normandy/docs/20261021-template-appointment-linking-fe-api-spec.md)
+Spec: [`normandy/docs/20261025-template-appointment-linking-fe-api-spec.md`](../../normandy/docs/20261025-template-appointment-linking-fe-api-spec.md)
 
 ### Staging data (site 4, 2026-10-22)
 
@@ -92,7 +92,7 @@ curl -sS -w 'HTTP %{http_code}\n' -o "$OUT_DIR/list-rules-facility-46.json" "${H
 
 ## Providers
 
-**UI:** `appointment_type`, `template_id`; optional `facility_id`, `search`, `page`, `items_per_page` → **Providers**. A type/template pair that isn't a rule returns `404` `"No appointment rule for that type and template"`.
+**UI:** `template_id`; optional `appointment_type`, `facility_id`, `search`, `page`, `items_per_page` → **Providers**. A type/template pair that isn't a rule returns `404` `"No appointment rule for that type and template"`.
 
 Default rule: expect 11 providers sorted by name, all `is_explicit: false`, 2 with `has_template: false` (C A, Inna Yaskin).
 
@@ -124,6 +124,16 @@ curl -sS -G -w 'HTTP %{http_code}\n' -o "$OUT_DIR/providers-follow-up-t64-amon-f
   --data-urlencode 'template_id=64' \
   --data-urlencode 'search=amon' \
   --data-urlencode 'facility_id=47' \
+  "$BASE/v1/scribe/admin_panel/appointment_rules/providers"
+```
+
+All site providers (Add rule **Select providers** picker): leave out `appointment_type`. Needs [#60362](https://github.com/getathelas/normandy/pull/60362) (`422` before it). Template 63: expect all 11 providers sorted by name, all `is_explicit: false`, 5 with `has_template: false` (`109902`, `110485`, `110505`, `125372`, `125381`). With `facility_id=46`: 3 providers, only Gautam Pradeep (`109902`) with `has_template: false`.
+
+```bash
+curl -sS -G -w 'HTTP %{http_code}\n' -o "$OUT_DIR/providers-site-t63.json" "${HDR[@]}" \
+  --data-urlencode 'template_id=63' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'items_per_page=20' \
   "$BASE/v1/scribe/admin_panel/appointment_rules/providers"
 ```
 

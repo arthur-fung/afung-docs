@@ -4,24 +4,24 @@ For the FE engineers building the **admin panel Appointment Rules tab** (§3–�
 
 This replaces [`20261008-template-appointment-linking-api-spec.md`](20261008-template-appointment-linking-api-spec.md) (admin) and [`20261013-template-appointment-linking-provider-api-spec.md`](20261013-template-appointment-linking-provider-api-spec.md) (provider) as the reference for the frontend. It was written against the code, not the design: admin endpoints at PR 10 (`391e3e8426`), provider endpoints at PR 13 (`bdc91cf707`), and the readers on `main` (`5dec3ab095`). §10 lists what changed from the earlier specs.
 
-Design: [`20261008-template-appointment-linking-design.md`](20261008-template-appointment-linking-design.md) · Checklist: [`20261008-template-appointment-linking-pr-checklist.md`](20261008-template-appointment-linking-pr-checklist.md) · Figma: [Provider Facing](https://www.figma.com/design/kVfXnRnPzkBSPnHrZVVPo5/Appointment-Template-Linking?node-id=1-4829&m=dev)
+Design: [`20261008-template-appointment-linking-design.md`](20261008-template-appointment-linking-design.md) · Checklist: [`20261025-template-appointment-linking-pr-checklist.md`](20261025-template-appointment-linking-pr-checklist.md) · Figma: [Provider Facing](https://www.figma.com/design/kVfXnRnPzkBSPnHrZVVPo5/Appointment-Template-Linking?node-id=1-4829&m=dev)
 
 ---
 
 ## 0. Availability
 
-| Endpoints | PR | Status (2026-10-23) |
+| Endpoints | PR | Status (2026-10-25) |
 |---|---|---|
 | Visit list / pre-chart resolver (§7.1–7.2) | [#60062](https://github.com/getathelas/normandy/pull/60062) (PR 4) | Merged 2026-10-21 |
 | `GET /appointment_rules` | [#60065](https://github.com/getathelas/normandy/pull/60065) (PR 5) | Merged 2026-10-22 |
 | `GET /providers`, `GET /template_coverage` | [#60069](https://github.com/getathelas/normandy/pull/60069) (PR 6) | Merged 2026-10-22 |
-| `POST /appointment_rules` | [#60070](https://github.com/getathelas/normandy/pull/60070) (PR 7) | Open, awaiting review |
-| `PATCH /{template_id}`, `PATCH /{template_id}/providers` | [#60355](https://github.com/getathelas/normandy/pull/60355) (PR 8) | Open, awaiting review |
-| `PUT /{template_id}/default`, `DELETE /{template_id}` | [#60358](https://github.com/getathelas/normandy/pull/60358) (PR 9) | Open, awaiting review |
-| `GET /missing`, `providers_without_template` actions | [#60362](https://github.com/getathelas/normandy/pull/60362) (PR 10) | Open, awaiting review |
-| v0 route guards (§7.3) | [#60064](https://github.com/getathelas/normandy/pull/60064) (PR 3) | Open, awaiting review |
-| `GET /appointment_rules/me` | [#60372](https://github.com/getathelas/normandy/pull/60372) (PR 12) | Open, awaiting review |
-| `PUT /appointment_rules/me` | [#60385](https://github.com/getathelas/normandy/pull/60385) (PR 13) | Open, awaiting review |
+| `POST /appointment_rules` | [#60070](https://github.com/getathelas/normandy/pull/60070) (PR 7) | Open |
+| `PATCH /{template_id}`, `PATCH /{template_id}/providers` | [#60355](https://github.com/getathelas/normandy/pull/60355) (PR 8) | Open |
+| `PUT /{template_id}/default`, `DELETE /{template_id}` | [#60358](https://github.com/getathelas/normandy/pull/60358) (PR 9) | Open |
+| `GET /missing`, `providers_without_template` actions, `GET /providers` without `appointment_type` | [#60362](https://github.com/getathelas/normandy/pull/60362) (PR 10) | Open |
+| v0 route guards (§7.3) | [#60064](https://github.com/getathelas/normandy/pull/60064) (PR 3) | Open |
+| `GET /appointment_rules/me` | [#60372](https://github.com/getathelas/normandy/pull/60372) (PR 12) | Open |
+| `PUT /appointment_rules/me` | [#60385](https://github.com/getathelas/normandy/pull/60385) (PR 13) | Open |
 
 Both feature flags are off everywhere. Until a PR is merged and deployed, its endpoint doesn't exist on staging.
 
@@ -45,6 +45,7 @@ Both feature flags are off everywhere. Until a PR is merged and deployed, its en
 | Writes | Each request is atomic, except `ADD_TEMPLATE` (§4). Writes to the same site and appointment type are serialized. |
 | Empty rules | Empty rules are deleted automatically. A non-default rule that loses its last provider stops existing. The **default** rule is also deleted when a write leaves it covering 0 providers because everyone is pinned to other rules. After that, the type has no default, so providers added later get no rule for it. The default is kept if the type has no other rule, for example on a site with no active providers. |
 | Error body | `{"detail": "<message>"}`. Pydantic `422`s use FastAPI's standard `detail` array. |
+| List sizes | `provider_ids` and `providers_without_template` in admin write bodies take at most 1000 items each. Longer lists get a `422`. |
 
 ---
 
@@ -147,18 +148,20 @@ All of these are `403` when `scribe_appointment_rules` is off for the site.
 }
 ```
 
-### 3.2 `GET /appointment_rules/providers`: side-panel provider list for one rule
+### 3.2 `GET /appointment_rules/providers`: side-panel provider list for one rule, or every site provider
 
 | Query param | Type | Required | Notes |
 |---|---|---|---|
-| `appointment_type` | string | yes | URL-encoded |
-| `template_id` | int ≥ 1 | yes | |
+| `appointment_type` | string | no | URL-encoded. Omit it to list every site provider (below). PR 10 |
+| `template_id` | int ≥ 1 | yes | With `appointment_type`: the rule. Without: the template `has_template` is checked against |
 | `facility_id` | int | no | |
 | `search` | string | no | Case-insensitive substring match on the name or email, trimmed |
 | `page` | int ≥ 1 | no | Default `1` |
 | `items_per_page` | int, 1–100 | no | If omitted, page 1 has 5 rows and later pages have 20, so page *n* ≥ 2 starts at offset `5 + (n − 2) × 20`. If set, every page has that many rows. |
 
 Sorted by name (case-insensitive), then `provider_id`. All rows have the same `is_explicit`: `false` on the default rule and `true` on any other rule.
+
+**Without `appointment_type` (PR 10):** returns every active site provider, the same set writes accept in `provider_ids` (§1), so providers with only Athelas accounts are left out. Used by the **Select providers** picker in the Add rule modal (§5.1, `apply_to: SELECTED`): the admin picks the template first, then sends its id as `template_id`. `has_template` says whether each provider has that template, and `is_explicit` is always `false`. There is no rule lookup, so this mode never returns `404`. `search`, `facility_id` and paging work the same.
 
 **Response `200`**
 
@@ -186,7 +189,7 @@ Sorted by name (case-insensitive), then `provider_id`. All rows have the same `i
 | Status | When |
 |---|---|
 | `200` with `providers: []` | Nothing matches `search`, or the rule covers 0 providers (see `provider_count`) |
-| `404` | There is no rule for `(appointment_type, template_id)` |
+| `404` | `appointment_type` sent and there is no rule for `(appointment_type, template_id)` |
 | `422` | `items_per_page` > 100, `page` < 1, or a required param is missing |
 
 ### 3.3 `GET /appointment_rules/template_coverage`: Add/Edit modal preview
@@ -270,7 +273,7 @@ The FE chooses which options to show for each group, using `GET /appointment_rul
 
 | Endpoint | Used for |
 |---|---|
-| `GET /v1/scribe/admin_panel/site_user_template_assignments` | Template dropdown in the Add/Edit modal |
+| `GET /v1/scribe/admin_panel/site_user_template_assignments` | Template dropdown in the Add/Edit modal. Not for picking providers: rows are scribe accounts with no `provider_id`. Use `GET /providers` without `appointment_type` (§3.2). |
 | `GET /v1/scribe/admin_panel/provider_groups/mapped_facilities_filter_options` | Facility filter options |
 
 ---
@@ -279,7 +282,7 @@ The FE chooses which options to show for each group, using `GET /appointment_rul
 
 Accepted by create, edit, move providers and delete. Set default doesn't take a body. This field lets the admin choose, for each provider, what happens when that provider doesn't have the template they are about to land on.
 
-- It is optional: `null`, omitted or `[]` means no actions. A `provider_id` may appear only once, or the request gets a `422`.
+- It is optional: `null`, omitted or `[]` means no actions. A `provider_id` may appear only once, or the request gets a `422`. At most 1000 entries (§1).
 - A provider who lacks the landing template and **isn't** listed still moves, and then shows up in missing rules.
 - **Landing template:**
   - create: the new rule's template
@@ -303,7 +306,7 @@ Accepted by create, edit, move providers and delete. Set default doesn't take a 
 
 | Action | Effect |
 |---|---|
-| `ADD_TEMPLATE` | The provider stays on the landing rule. **After** the rule write commits, the landing template is added to every enabled scribe account the provider has at the site. If the template is already active on an account, that account isn't changed. Otherwise the template is added or reactivated at the lowest priority, so it never becomes the provider's primary template. If this fails, the provider is still on the rule (and still missing), and the failure appears in `errors`. Some of the provider's accounts may already have been updated. To retry, resolve the provider from the missing pop-up. |
+| `ADD_TEMPLATE` | The provider stays on the landing rule. **After** the rule write commits, the landing template is added to every enabled scribe account the provider has at the site. If the template is already active on an account, that account isn't changed. Otherwise the template is added or reactivated so it never becomes the account's primary template. If the account has numbered priorities, it gets the highest number plus one. If none are numbered, it is added without a priority; when its id is lower than the current primary's, the current primary is given priority `1` so it stays first. If this fails, the provider is still on the rule (and still missing), and the failure appears in `errors`. Some of the provider's accounts may already have been updated. To retry, resolve the provider from the missing pop-up. |
 | `PERSONAL_RULES` | The provider is pinned to a rule with a template they have, instead of the landing template. This is applied in the same transaction as the rule write, as its last step. |
 
 **Which template `PERSONAL_RULES` uses:**
@@ -363,8 +366,9 @@ Every write returns a `WriteResponse` (§2). Every route except create addresses
 
 | Status | When |
 |---|---|
-| `400` | No provider at the site has the template; some `provider_ids` aren't site providers; or a `providers_without_template` entry fails validation (§4) |
+| `400` | No provider at the site has the template; the template has been deleted; some `provider_ids` aren't site providers; or a `providers_without_template` entry fails validation (§4) |
 | `409` | The template is already a rule for the type |
+| `422` | `provider_ids` or `providers_without_template` has more than 1000 items |
 
 ### 5.2 `PUT /appointment_rules/{template_id}/default`: make a rule the default
 
@@ -381,7 +385,7 @@ PUT /v1/scribe/admin_panel/appointment_rules/45/default?appointment_type=Illness
 
 Providers who don't have the new default's template aren't handled here; they show up in `missing_rules`.
 
-**Response:** `200 WriteResponse`. Returns `404` if there's no such rule.
+**Response:** `200 WriteResponse`. Returns `404` if there's no such rule, and `400` if the rule isn't the default and its template has been deleted (no provider could use it). Re-running on the current default still succeeds.
 
 ### 5.3 `PATCH /appointment_rules/{template_id}`: edit a rule
 
@@ -424,9 +428,9 @@ Edit never changes which rule is the default. Use `PUT /{template_id}/default` f
 
 | Status | When |
 |---|---|
-| `400` | `provider_ids` sent on the default rule; `provider_ids` sent with a `new_template_id` that is the default's template; no provider at the site has `new_template_id`; some `provider_ids` aren't site providers; or a `providers_without_template` entry fails validation |
+| `400` | `provider_ids` sent on the default rule; `provider_ids` sent with a `new_template_id` that is the default's template; no provider at the site has `new_template_id`; `new_template_id` has been deleted; some `provider_ids` aren't site providers; or a `providers_without_template` entry fails validation |
 | `404` | There's no such rule |
-| `422` | `provider_ids: []` |
+| `422` | `provider_ids: []`, or `provider_ids` or `providers_without_template` has more than 1000 items |
 
 ### 5.4 `PATCH /appointment_rules/{template_id}/providers`: move providers onto a rule
 
@@ -453,7 +457,7 @@ Moving providers to the default removes their pins. A rule that loses its last p
 |---|---|
 | `400` | Some `provider_ids` aren't site providers, or a `providers_without_template` entry fails validation |
 | `404` | There's no such rule |
-| `422` | `provider_ids` is empty |
+| `422` | `provider_ids` is empty, or `provider_ids` or `providers_without_template` has more than 1000 items |
 
 ### 5.5 `DELETE /appointment_rules/{template_id}`: delete a rule
 
@@ -490,6 +494,7 @@ DELETE /v1/scribe/admin_panel/appointment_rules/12?appointment_type=Illness
 | `400` | `PERSONAL_RULES` would put a provider back on the rule being deleted, because its template is the provider's primary template. Use `ADD_TEMPLATE` for that provider, or leave them out. |
 | `400` | A `providers_without_template` entry fails validation |
 | `404` | There's no such rule |
+| `422` | `providers_without_template` has more than 1000 items |
 
 ---
 
@@ -623,16 +628,17 @@ Sending the same pair twice gives the same result, so retrying is safe.
 
 ---
 
-## 10. Changes from the 2026-10-08 / 2026-10-13 specs
+## 10. Changes from the 2026-10-08 / 2026-10-13 / 2026-10-21 specs
 
 | Area | Before | Now |
 |---|---|---|
+| Site provider list (2026-10-25) | No endpoint returned every site provider with `provider_id` | `GET /providers` without `appointment_type` (§3.2, PR 10) |
 | `ADD_TEMPLATE` timing | Ran before the rule write | Runs after the rule write commits. Same result for the user, and a failed write no longer adds anything. |
 | `ADD_TEMPLATE` reactivation (OQ6) | Pending | Never becomes the primary template: it is added or reactivated at the lowest priority |
 | `PERSONAL_RULES` target (OQ3) | Primary template; which account wins was pending | The provider's existing non-default rule wins first, then the primary template on the provider's one account |
 | `PERSONAL_RULES` → default (OQ2) | Pending | Confirmed: the provider falls to the default |
 | No landing template | Not covered | `providers_without_template` is ignored |
-| New `400`s | — | Edit `provider_ids` with a `new_template_id` that is the default's template; delete with `PERSONAL_RULES` pointing back at the deleted rule; site can't be resolved |
+| New `400`s | — | Create, edit `new_template_id` or set default on a deleted template; edit `provider_ids` with a `new_template_id` that is the default's template; delete with `PERSONAL_RULES` pointing back at the deleted rule; site can't be resolved |
 | "Template isn't active at the site" `400` | All writes | Only on create, and on edit with `new_template_id` |
 | `template_coverage` | No error listed | `404` for an unknown, deleted or non-scribe template |
 | `/providers` paging | — | `items_per_page` is capped at 100, and the response echoes the page size actually used |

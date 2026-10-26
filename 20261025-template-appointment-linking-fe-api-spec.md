@@ -10,18 +10,18 @@ Design: [`20261008-template-appointment-linking-design.md`](20261008-template-ap
 
 ## 0. Availability
 
-| Endpoints | PR | Status (2026-10-25) |
+| Endpoints | PR | Status (2026-10-26) |
 |---|---|---|
 | Visit list / pre-chart resolver (§7.1–7.2) | [#60062](https://github.com/getathelas/normandy/pull/60062) (PR 4) | Merged 2026-10-21 |
 | `GET /appointment_rules` | [#60065](https://github.com/getathelas/normandy/pull/60065) (PR 5) | Merged 2026-10-22 |
 | `GET /providers`, `GET /template_coverage` | [#60069](https://github.com/getathelas/normandy/pull/60069) (PR 6) | Merged 2026-10-22 |
-| `POST /appointment_rules` | [#60070](https://github.com/getathelas/normandy/pull/60070) (PR 7) | Open |
-| `PATCH /{template_id}`, `PATCH /{template_id}/providers` | [#60355](https://github.com/getathelas/normandy/pull/60355) (PR 8) | Open |
-| `PUT /{template_id}/default`, `DELETE /{template_id}` | [#60358](https://github.com/getathelas/normandy/pull/60358) (PR 9) | Open |
-| `GET /missing`, `providers_without_template` actions, `GET /providers` without `appointment_type` | [#60362](https://github.com/getathelas/normandy/pull/60362) (PR 10) | Open |
-| v0 route guards (§7.3) | [#60064](https://github.com/getathelas/normandy/pull/60064) (PR 3) | Open |
-| `GET /appointment_rules/me` | [#60372](https://github.com/getathelas/normandy/pull/60372) (PR 12) | Open |
-| `PUT /appointment_rules/me` | [#60385](https://github.com/getathelas/normandy/pull/60385) (PR 13) | Open |
+| `POST /appointment_rules` | [#60070](https://github.com/getathelas/normandy/pull/60070) (PR 7) | Merged 2026-10-26 |
+| `PATCH /{template_id}`, `PATCH /{template_id}/providers` | [#60355](https://github.com/getathelas/normandy/pull/60355) (PR 8) | Merged 2026-10-26 |
+| `PUT /{template_id}/default`, `DELETE /{template_id}` | [#60358](https://github.com/getathelas/normandy/pull/60358) (PR 9) | Merged 2026-10-26 |
+| `GET /missing`, `providers_without_template` actions, `GET /providers` without `appointment_type` | [#60362](https://github.com/getathelas/normandy/pull/60362) (PR 10) | Open, awaiting review |
+| v0 route guards (§7.3) | [#60064](https://github.com/getathelas/normandy/pull/60064) (PR 3) | Open, awaiting review |
+| `GET /appointment_rules/me` | [#60372](https://github.com/getathelas/normandy/pull/60372) (PR 12) | Open, awaiting review |
+| `PUT /appointment_rules/me` | [#60385](https://github.com/getathelas/normandy/pull/60385) (PR 13) | Open, awaiting review |
 
 Both feature flags are off everywhere. Until a PR is merged and deployed, its endpoint doesn't exist on staging.
 
@@ -152,7 +152,7 @@ All of these are `403` when `scribe_appointment_rules` is off for the site.
 
 | Query param | Type | Required | Notes |
 |---|---|---|---|
-| `appointment_type` | string | no | URL-encoded. Omit it to list every site provider (below). PR 10 |
+| `appointment_type` | string | no | URL-encoded. Omit it to list every site provider (below); don't send it empty. PR 10 |
 | `template_id` | int ≥ 1 | yes | With `appointment_type`: the rule. Without: the template `has_template` is checked against |
 | `facility_id` | int | no | |
 | `search` | string | no | Case-insensitive substring match on the name or email, trimmed |
@@ -161,7 +161,7 @@ All of these are `403` when `scribe_appointment_rules` is off for the site.
 
 Sorted by name (case-insensitive), then `provider_id`. All rows have the same `is_explicit`: `false` on the default rule and `true` on any other rule.
 
-**Without `appointment_type` (PR 10):** returns every active site provider, the same set writes accept in `provider_ids` (§1), so providers with only Athelas accounts are left out. Used by the **Select providers** picker in the Add rule modal (§5.1, `apply_to: SELECTED`): the admin picks the template first, then sends its id as `template_id`. `has_template` says whether each provider has that template, and `is_explicit` is always `false`. There is no rule lookup, so this mode never returns `404`. `search`, `facility_id` and paging work the same.
+**Without `appointment_type` (PR 10):** returns every active site provider, the same set writes accept in `provider_ids` (§1), so providers with only Athelas accounts are left out. Used by the **Select providers** picker in the Add rule modal (§5.1, `apply_to: SELECTED`): the admin picks the template first, then sends its id as `template_id`. `has_template` says whether each provider has that template, and `is_explicit` is always `false`. There is no rule lookup, but `template_id` must be a live scribe template (the same check as §3.3), or the response is `404`. `search`, `facility_id` and paging work the same.
 
 **Response `200`**
 
@@ -189,8 +189,9 @@ Sorted by name (case-insensitive), then `provider_id`. All rows have the same `i
 | Status | When |
 |---|---|
 | `200` with `providers: []` | Nothing matches `search`, or the rule covers 0 providers (see `provider_count`) |
-| `404` | `appointment_type` sent and there is no rule for `(appointment_type, template_id)` |
-| `422` | `items_per_page` > 100, `page` < 1, or a required param is missing |
+| `404` | `appointment_type` sent and there is no rule for `(appointment_type, template_id)`: `"No appointment rule for that type and template"` |
+| `404` | `appointment_type` omitted and the template doesn't exist, is deleted, or isn't a scribe template: `"Template not found"` |
+| `422` | `items_per_page` > 100, `page` < 1, `appointment_type` sent empty, or a required param is missing |
 
 ### 3.3 `GET /appointment_rules/template_coverage`: Add/Edit modal preview
 

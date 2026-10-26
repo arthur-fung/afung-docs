@@ -6,18 +6,18 @@ All parameters below are for the **staging** account `arthur.fung@commure.com` (
 
 ### PRs
 
-Status as of 2026-10-25. Merged PRs are on `main`. The open PRs are stacked, so each branch includes the ones above it: #60070 → #60355 → #60358 → #60362, and #60070 → #60372 → #60385. To test everything except my rules, check out #60362.
+Status as of 2026-10-26. Merged PRs are on `main`. #60362 and #60372 are based on `main`, and #60385 is stacked on #60372. To test everything except my rules, check out #60362; for my rules and choose template, check out #60385.
 
 | PR | Endpoints | Sections | Status |
 |---|---|---|---|
 | [#60065](https://github.com/getathelas/normandy/pull/60065) | `GET /admin_panel/appointment_rules` | [List rules](#list-rules) | Merged 2026-10-22 |
 | [#60069](https://github.com/getathelas/normandy/pull/60069) | `GET …/providers`, `GET …/template_coverage` | [Providers](#providers), [Coverage](#coverage) | Merged 2026-10-22 |
-| [#60070](https://github.com/getathelas/normandy/pull/60070) | `POST /admin_panel/appointment_rules` | [Create](#create) | Open |
-| [#60355](https://github.com/getathelas/normandy/pull/60355) | `PATCH …/{template_id}`, `PATCH …/{template_id}/providers` | [Edit](#edit), [Move](#move) | Open |
-| [#60358](https://github.com/getathelas/normandy/pull/60358) | `PUT …/{template_id}/default`, `DELETE …/{template_id}` | [Set default](#set-default), [Delete](#delete), [Cleanup](#cleanup) | Open |
-| [#60362](https://github.com/getathelas/normandy/pull/60362) | `GET …/missing`; `providers_without_template` on create, edit, move, delete; `GET …/providers` without `appointment_type` | [Missing](#missing), [Providers](#providers) | Open |
-| [#60372](https://github.com/getathelas/normandy/pull/60372) | `GET /v1/scribe/appointment_rules/me` | [My rules](#my-rules) | Open |
-| [#60385](https://github.com/getathelas/normandy/pull/60385) | `PUT /v1/scribe/appointment_rules/me` | [Choose template](#choose-template) | Open |
+| [#60070](https://github.com/getathelas/normandy/pull/60070) | `POST /admin_panel/appointment_rules` | [Create](#create) | Merged 2026-10-26 |
+| [#60355](https://github.com/getathelas/normandy/pull/60355) | `PATCH …/{template_id}`, `PATCH …/{template_id}/providers` | [Edit](#edit), [Move](#move) | Merged 2026-10-26 |
+| [#60358](https://github.com/getathelas/normandy/pull/60358) | `PUT …/{template_id}/default`, `DELETE …/{template_id}` | [Set default](#set-default), [Delete](#delete), [Cleanup](#cleanup) | Merged 2026-10-26 |
+| [#60362](https://github.com/getathelas/normandy/pull/60362) | `GET …/missing`; `providers_without_template` on create, edit, move, delete; `GET …/providers` without `appointment_type` | [Missing](#missing), [Providers](#providers) | Open, awaiting review |
+| [#60372](https://github.com/getathelas/normandy/pull/60372) | `GET /v1/scribe/appointment_rules/me` | [My rules](#my-rules) | Open, awaiting review |
+| [#60385](https://github.com/getathelas/normandy/pull/60385) | `PUT /v1/scribe/appointment_rules/me` | [Choose template](#choose-template) | Open, awaiting review |
 
 Set once:
 

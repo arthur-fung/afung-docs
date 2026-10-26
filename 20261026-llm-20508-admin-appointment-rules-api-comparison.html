@@ -1,0 +1,245 @@
+---
+title: "LLM-20508 — Admin Appointment Rules: current branch vs v2 API spec"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LLM-20508 — Admin Appointment Rules: current branch vs v2 API spec</title>
+<style>
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; color: #1f2328; max-width: 1500px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 16px; margin-top: 32px; }
+  .meta { color: #59636e; margin-bottom: 20px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #d1d9e0; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; position: sticky; top: 0; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  td.check { text-align: center; font-size: 16px; white-space: nowrap; }
+  td.num { color: #59636e; text-align: right; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: #eff1f3; padding: 1px 4px; border-radius: 4px; }
+  .legend span { margin-right: 18px; }
+  .gap { color: #9a3412; font-weight: 600; }
+  .pr { color: #59636e; font-size: 12px; white-space: nowrap; }
+  .pr.open { color: #9a6700; }
+</style>
+</head>
+<body>
+<h1>LLM-20508 — Admin Appointment Rules: current branch vs v2 API spec</h1>
+<div class="meta">
+  LLM-20508 branch at <code>f1caccb35</code> (no new commits since 2026-10-23; no PR yet)
+  · Spec <code>normandy/docs/20261025-template-appointment-linking-fe-api-spec.md</code> · 2026-10-26 · Updates <a href="20261025-llm-20508-admin-appointment-rules-api-comparison.html">2026-10-25</a>
+</div>
+
+<p class="legend"><b>V0 OK:</b>
+  <span>✅ works as is</span>
+  <span>⚠️ wired, but shows the wrong data or uses the wrong check</span>
+  <span>❌ not wired (TODO or stub)</span></p>
+<p class="legend"><b>V2 OK:</b> <span>✅ v2 supports it</span><span>⚠️ in an open PR, not merged yet</span><span>❌ v2 can't do it</span><span class="gap">❗ in the last column: missing from the v2 API</span>
+</p>
+
+<p><b>Summary:</b> V0 OK ✅ 3 · ⚠️ 6 · ❌ 9 &nbsp;|&nbsp; V2 OK ✅ 17 · ⚠️ 1 &nbsp;|&nbsp; ❗ 1 v2 API gap, implemented in #60362 (open)</p>
+<p><b>Backend (2026-10-26):</b> 5 of 6 PRs merged; #60362 is open, awaiting review. Rows 1–11, 16 and 17 can be built against <code>main</code> now. Rows 12–15 need #60362 for <code>providers_without_template</code>; row 15 also needs it for <code>GET /missing</code>, and row 14b for the site-wide provider picker.</p>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>V0 OK</th>
+      <th>V2 OK</th>
+      <th>UI</th>
+      <th>Spec (v0)</th>
+      <th>Spec (v2)</th>
+      <th>v2 PR</th>
+      <th>Gap</th>
+      <th>Missing in v2 API</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="num">1</td><td class="check">⚠️</td><td class="check">✅</td>
+      <td>Rules list, one card per type</td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a> <span class="pr">merged 10-22</span></td>
+      <td>v0 has one mapping per type, so it can't show several rules per type, <code>template_deleted</code> or <code>providers_missing_template_count</code>. v2 returns <code>rules[]</code> per type.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">2</td><td class="check">⚠️</td><td class="check">✅</td>
+      <td>Default badge</td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a> <span class="pr">merged 10-22</span></td>
+      <td>Badges the first rule (<code>i == 0</code>). A type can have rules and no default; use <code>is_default</code>.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">3</td><td class="check">⚠️</td><td class="check">✅</td>
+      <td>Provider count on a rule row</td>
+      <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a> <span class="pr">merged 10-22</span></td>
+      <td>Counts accounts that have the template (<code>templateToProvidersMapProvider</code>), not providers the rule covers. Use <code>provider_count</code>.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">4</td><td class="check">⚠️</td><td class="check">✅</td>
+      <td>"Missing mapping" banner</td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code><br><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a> <span class="pr">merged 10-22</span></td>
+      <td>Worked out in the app from the default template only, and its appointment count is unmapped types. Use <code>missing_rules</code>: types with a rule some provider can't use.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">5</td><td class="check">✅</td><td class="check">✅</td>
+      <td>All / N Missing Mapping toggle</td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_type_templates</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a> <span class="pr">merged 10-22</span></td>
+      <td>— (types with <code>rules: []</code>, counted in the app)</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">6</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Facility chip</td>
+      <td>—</td>
+      <td><code>GET /v1/scribe/admin_panel/provider_groups/mapped_facilities_filter_options</code><br><code>GET /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60065">#60065</a> <span class="pr">merged 10-22</span></td>
+      <td>Stub (<code>onTap: () {}</code>). Send <code>facility_id</code> on the reads.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">7</td><td class="check">✅</td><td class="check">✅</td>
+      <td>Search</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>— (client-side; the list isn't paged)</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">8</td><td class="check">✅</td><td class="check">✅</td>
+      <td>Template dropdowns</td>
+      <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
+      <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">9</td><td class="check">⚠️</td><td class="check">✅</td>
+      <td>Side panel provider list</td>
+      <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules/providers</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60069">#60069</a> <span class="pr">merged 10-22</span></td>
+      <td>Shows accounts that have the template, with "+N more" paged in the app. v2 returns the rule's members, with server search, pages of 5 then 20, <code>has_template</code> and <code>is_explicit</code>.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">10</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Set as default</td>
+      <td>—</td>
+      <td><code>PUT /v1/scribe/admin_panel/appointment_rules/{template_id}/default</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60358">#60358</a> <span class="pr">merged 10-26</span></td>
+      <td>TODO (local state only)</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">11</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Change template</td>
+      <td>—</td>
+      <td><code>PATCH /v1/scribe/admin_panel/appointment_rules/{template_id}</code><br><code>GET /v1/scribe/admin_panel/appointment_rules/template_coverage</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60355">#60355</a> <span class="pr">merged 10-26</span><br><a href="https://github.com/getathelas/normandy/pull/60069">#60069</a> <span class="pr">merged 10-22</span></td>
+      <td>TODO. Send <code>new_template_id</code>; preview with <code>template_coverage</code>. Merge and "joins the default" cases not handled.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">12</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Move provider</td>
+      <td>—</td>
+      <td><code>PATCH /v1/scribe/admin_panel/appointment_rules/{template_id}/providers</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60355">#60355</a> <span class="pr">merged 10-26</span><br><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a> <span class="pr open">open</span></td>
+      <td>TODO. One call with <code>provider_ids</code> (one or many) + <code>providers_without_template</code>; the target must be an existing rule of the type. Step 1 lists every site template instead of the type's other rules. Drop step 2 (a template change on the rule being left, not part of a move). No <code>providers_without_template</code> choice. No confirm before moving a rule's last provider (that rule is then deleted).</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">13</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Delete rule</td>
+      <td>—</td>
+      <td><code>DELETE /v1/scribe/admin_panel/appointment_rules/{template_id}</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60358">#60358</a> <span class="pr">merged 10-26</span><br><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a> <span class="pr open">open</span></td>
+      <td>TODO. Inputs match: <code>new_default_template_id</code> + <code>providers_without_template</code> (<code>ADD_TEMPLATE</code> / <code>PERSONAL_RULES</code>).</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">14a</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Add rule, Apply to All</td>
+      <td>—</td>
+      <td><code>POST /v1/scribe/admin_panel/appointment_rules</code><br><code>GET /v1/scribe/admin_panel/appointment_rules/template_coverage</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60070">#60070</a> <span class="pr">merged 10-26</span><br><a href="https://github.com/getathelas/normandy/pull/60069">#60069</a> <span class="pr">merged 10-22</span><br><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a> <span class="pr open">open</span></td>
+      <td>TODO. <code>apply_to: ALL</code>, <code>is_default</code> + <code>providers_without_template</code> (who lacks the template comes from <code>template_coverage</code>). Two dialogs for one flow ("Add rule" when the type has rules, "Add template" when it has none); merge into one, with Set as default pre-checked when the type has no rules, always asking about providers without the template.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">14b</td><td class="check">❌</td><td class="check">⚠️</td>
+      <td>Add rule, Select providers</td>
+      <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules/providers</code><br><code>POST /v1/scribe/admin_panel/appointment_rules</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a> <span class="pr open">open</span><br><a href="https://github.com/getathelas/normandy/pull/60070">#60070</a> <span class="pr">merged 10-26</span></td>
+      <td>TODO. Picker lists accounts keyed by <code>scribeAccountId</code>; it should load from <code>GET /providers</code> without <code>appointment_type</code> and key by <code>provider_id</code>. Save with <code>apply_to: SELECTED</code>, <code>provider_ids</code>, <code>is_default</code> + <code>providers_without_template</code>.</td>
+      <td class="gap">❗ Implemented in #60362 (open, awaiting review): <code>appointment_type</code> is optional on <code>GET /providers</code></td>
+    </tr>
+    <tr>
+      <td class="num">15</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Review missing</td>
+      <td><code>GET /v1/scribe/admin_panel/site_user_template_assignments</code></td>
+      <td><code>GET /v1/scribe/admin_panel/appointment_rules/missing</code><br><code>PATCH /v1/scribe/admin_panel/appointment_rules/{template_id}</code></td>
+      <td><a href="https://github.com/getathelas/normandy/pull/60362">#60362</a> <span class="pr open">open</span><br><a href="https://github.com/getathelas/normandy/pull/60355">#60355</a> <span class="pr">merged 10-26</span></td>
+      <td>Worked out in the app (default template only); TODO on Finish. v2: <code>GET /missing</code> covers every rule, then one <code>PATCH</code> per group with only <code>providers_without_template</code>. Offer only "Create personal rule" when the type has no default.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">16</td><td class="check">❌</td><td class="check">✅</td>
+      <td>Errors</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>Not handled: 403 (feature off), 404 (rule gone), 409 (conflict, refetch), 500 "could not be loaded" (saved: refetch, don't retry).</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td class="num">17</td><td class="check">⚠️</td><td class="check">✅</td>
+      <td>Tab gate</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>Gated on <code>scribeAutoSelectTemplate</code> (v0). Use <code>scribe_appointment_rules</code>; every v2 route returns 403 without it.</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Missing in the v2 API</h2>
+<ol>
+  <li><b>No list of all site providers with <code>provider_id</code> (row 14b).</b> Writes take <code>provider_id</code>, but <code>site_user_template_assignments</code> lists scribe accounts without it, and <code>/providers</code>, <code>/template_coverage</code> and <code>/missing</code> return only subsets. <b>Implemented in #60362 (open, awaiting review):</b> <code>GET /appointment_rules/providers</code> with <code>appointment_type</code> optional. Without it, the endpoint returns every active site provider (the set writes accept), with <code>has_template</code> for <code>template_id</code>, <code>is_explicit: false</code>, and the usual search, <code>facility_id</code> and paging. Spec: <code>20261025-template-appointment-linking-fe-api-spec.md</code>, <code>GET /appointment_rules/providers</code> section.</li>
+</ol>
+
+
+<h2>Decisions</h2>
+<ol>
+  <li><b>v0 is acceptable.</b> Using v0 doesn't fail a row on its own; the Check column scores behaviour only.</li>
+  <li><b>v2 swap is the plan.</b> Replace the v0 view model with the v2 client (<code>AppointmentRulesV2Repository</code>, already on develop from #6358), and use <code>missing_rules</code> / <code>GET /missing</code> instead of the client-side counts. That fixes rows 1–4, 9 and 15. Anything the screens need that v2 can't provide is listed under "Missing in the v2 API".</li>
+  <li><b>Move is a simple move.</b> It moves one or more providers to another existing rule of the same type, with one <code>PATCH /{target}/providers</code>. No template change.</li>
+</ol>
+
+<h2>Changes needed in Move</h2>
+<ol>
+  <li>Step 1 lists the type's other rules (from <code>GET /appointment_rules</code>), not every site template.</li>
+  <li>Remove step 2 ("Which template should they use instead?").</li>
+  <li>Ask what happens to moved providers who don't have the target's template (<code>providers_without_template</code>: <code>ADD_TEMPLATE</code> / <code>PERSONAL_RULES</code>), as Delete does.</li>
+  <li>Confirm before moving a rule's last provider, since that rule is then deleted.</li>
+</ol>
+</body>
+</html>

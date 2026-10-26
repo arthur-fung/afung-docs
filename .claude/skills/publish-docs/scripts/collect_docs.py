@@ -40,7 +40,13 @@ def find_docs(prefix):
                 continue
             for p in entries:
                 if p.is_dir():
-                    if p.name not in PRUNE and not p.is_symlink() and depth < MAX_DEPTH:
+                    # Dot dirs hold worktree copies (.claude/worktrees) and tooling.
+                    if (
+                        p.name not in PRUNE
+                        and not p.name.startswith(".")
+                        and not p.is_symlink()
+                        and depth < MAX_DEPTH
+                    ):
                         stack.append((p, depth + 1))
                 elif (
                     p.is_file()

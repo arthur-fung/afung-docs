@@ -91,11 +91,6 @@ layout: null
   <li><b>Engineering:</b> add the trigger to the <code>recording ended</code> event (user tap vs. app) so cases like this can be confirmed. The same gap exists for pause events on web.</li>
 </ol>
 
-<h2>Suggested reply for the support thread</h2>
-<blockquote>
-  I checked the events for this recording. The provider recorded for 6.5 minutes without pausing, then the app logged "recording ended". The recording uploaded and went to MDS 10 seconds later. That's the same steps as all 17 recordings they ended that day. Their pauses worked normally: paused recordings stayed paused, and one left paused was never sent. So this recording was ended, not paused. On this account, ending a recording always sends it to MDS, whatever the auto-send setting. Can support ask the provider which button they pressed? We'll also start logging what triggers an end, so we can tell a user tap from the app in future.
-</blockquote>
-
 <p class="muted">Sources: Postgres <code>scribe</code> (prod read replica) and <code>scribe_events</code> (StarRocks, via Retool). Times are UTC. Identifiers are shortened and no patient or provider details are included.</p>
 
 </body>

@@ -1,0 +1,102 @@
+---
+title: "Paused recording sent to MDS: ticket 570799 investigation"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paused recording sent to MDS: ticket 570799 investigation</title>
+<style>
+  :root { --fg:#1f2328; --muted:#59636e; --line:#d1d9e0; --bg:#ffffff; --soft:#f6f8fa; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --accent:#0969da; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e6edf3; --muted:#9198a1; --line:#3d444d; --bg:#0d1117; --soft:#151b23; --ok:#3fb950; --warn:#d29922; --bad:#f85149; --accent:#4493f8; }
+  }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--fg); background: var(--bg); max-width: 860px; margin: 40px auto; padding: 0 20px; }
+  h1 { font-size: 1.7em; margin-bottom: 4px; }
+  h2 { font-size: 1.25em; margin-top: 2em; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .sub { color: var(--muted); margin-top: 0; }
+  .answer { background: var(--soft); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; padding: 14px 18px; margin: 20px 0; }
+  .answer p { margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  td.t { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  code { font: 0.88em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .warn { color: var(--warn); font-weight: 600; }
+  ol.steps > li { margin-bottom: 6px; }
+  .flow { font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .muted { color: var(--muted); font-size: 0.92em; }
+  blockquote { margin: 12px 0; padding: 10px 16px; border-left: 4px solid var(--line); color: var(--fg); background: var(--soft); border-radius: 0 6px 6px 0; }
+</style>
+</head>
+<body>
+
+<h1>Paused recording sent to MDS</h1>
+<p class="sub">Support ticket 570799 · iOS app 3.38.0 · recording on 2026-09-17 · investigated 2026-10-27</p>
+
+<div class="answer">
+  <p><b>Short answer:</b> the recording was <b>ended, not paused</b>.</p>
+  <p>The provider recorded for 6 min 25 s without pausing, then the app logged <code>recording ended</code>. On this account an ended recording always goes to MDS. Pause itself worked normally all day: no paused recording was sent on its own.</p>
+</div>
+
+<h2>1. What they're asking</h2>
+<p>The provider says: <i>"When I pause a recording to finish it later, it gets sent to the scribe/MDS team before I've finished. Auto-send is off. Why, and how do we stop it?"</i></p>
+<p>Support's theory was that the app sent the recording without the provider ending it, because they couldn't find a <code>PARALLEL_RECORDING_ENDED</code> event for it.</p>
+
+<h2>2. What I checked</h2>
+<ol class="steps">
+  <li>The scribe row for the recording (<code>…5327fd</code>) on the Postgres replica: when it was created, its audio length, status and app version.</li>
+  <li>Every app event for this recording in <code>scribe_events</code>, from 9/15 to 9/17.</li>
+  <li>The same provider's other recordings that day, to compare against what normal looks like.</li>
+</ol>
+
+<h2>3. What happened to this recording, step by step</h2>
+<table>
+  <tr><th>Time (UTC)</th><th>What happened</th></tr>
+  <tr><td class="t">17:23:31</td><td>The provider started recording.</td></tr>
+  <tr><td class="t">17:23 → 17:29</td><td>Recorded for <b>6 min 25 s</b>. <b>Never paused.</b> Audio levels show normal speech (average −33 dBFS).</td></tr>
+  <tr><td class="t">17:29:56</td><td><span class="warn">The app logged <code>recording ended</code></span> (385 s recorded).</td></tr>
+  <tr><td class="t">17:29:58</td><td>The audio uploaded, the scribe was created and the local copy was deleted.</td></tr>
+  <tr><td class="t">17:30:06</td><td>The note was sent to MDS.</td></tr>
+</table>
+<p>The <code>recording ended</code> event <b>is there</b>, so support's theory doesn't hold. Nothing suggests an automatic upload: no app kill, no background event, no cache recovery.</p>
+
+<h2>4. Is that normal for this provider?</h2>
+<p>Yes. That day the provider <b>ended 17 recordings</b>, and every one went through the same steps:</p>
+<p class="flow">recording ended → uploaded → sent to MDS (6–14 s later)</p>
+<p>The provider also <b>paused 13 times</b> that day, and every pause worked:</p>
+<table>
+  <tr><th>Recording</th><th>What the app logged</th><th>Sent to MDS?</th></tr>
+  <tr><td><b>Ticket recording</b></td><td class="flow">start → <b>end at 6:25</b> (no pause)</td><td class="bad">Yes, because it was ended</td></tr>
+  <tr><td>Example A</td><td class="flow">start → pause → resumed 2.4 h later → end</td><td>Only after it was ended</td></tr>
+  <tr><td>Example B</td><td class="flow">start → pause → resume → pause → resume → end</td><td>Only after it was ended</td></tr>
+  <tr><td>Example C</td><td class="flow">start → pause → nothing else</td><td class="ok">No, it stayed paused</td></tr>
+</table>
+
+<h2>5. Conclusion</h2>
+<ul>
+  <li><span class="ok">Pause works.</span> No paused recording was sent on its own.</li>
+  <li><b>This recording wasn't paused. It was ended</b> after 6.5 minutes, most likely because End (or Send) was tapped instead of Pause.</li>
+  <li><b>On this account, ending a recording always sends it to MDS.</b> The auto-send setting doesn't change that.</li>
+  <li><span class="warn">Can't rule out:</span> the app logs <i>that</i> a recording ended, not <i>what</i> ended it. A user tap and an end triggered by the app look the same in today's data.</li>
+</ul>
+
+<h2>6. Next steps</h2>
+<ol class="steps">
+  <li><b>Support:</b> ask the provider which button they pressed and on which screen. A confusing or misplaced button would explain repeat reports.</li>
+  <li><b>Engineering:</b> add the trigger to the <code>recording ended</code> event (user tap vs. app) so cases like this can be confirmed. The same gap exists for pause events on web.</li>
+</ol>
+
+<h2>Suggested reply for the support thread</h2>
+<blockquote>
+  I checked the events for this recording. The provider recorded for 6.5 minutes without pausing, then the app logged "recording ended". The recording uploaded and went to MDS 10 seconds later. That's the same steps as all 17 recordings they ended that day. Their pauses worked normally: paused recordings stayed paused, and one left paused was never sent. So this recording was ended, not paused. On this account, ending a recording always sends it to MDS, whatever the auto-send setting. Can support ask the provider which button they pressed? We'll also start logging what triggers an end, so we can tell a user tap from the app in future.
+</blockquote>
+
+<p class="muted">Sources: Postgres <code>scribe</code> (prod read replica) and <code>scribe_events</code> (StarRocks, via Retool). Times are UTC. Identifiers are shortened and no patient or provider details are included.</p>
+
+</body>
+</html>

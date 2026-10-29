@@ -1,0 +1,551 @@
+---
+title: "Android Intune startup crashes: bots, not users (2026-10-29)"
+layout: null
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android Intune startup crashes: bots, not users (2026-10-29)</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --good: #006300;
+  --critical: #d03b3b;
+  --wash: rgba(42,120,214,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --good: #0ca30c; --wash: rgba(57,135,229,0.12);
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --good: #0ca30c; --wash: rgba(57,135,229,0.12);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { background: var(--page); color: var(--text-primary); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; padding: 32px 20px 64px; }
+.wrap { max-width: 980px; margin: 0 auto; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; }
+h2 { font-size: 19px; margin: 0 0 4px; }
+h3 { font-size: 15px; margin: 0 0 6px; }
+p { margin: 6px 0; }
+.sub { color: var(--text-secondary); }
+.muted { color: var(--text-muted); font-size: 13px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin: 16px 0; }
+.hero { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
+.hero .num { font-size: 64px; font-weight: 600; line-height: 1; }
+.verdict { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--border); }
+.verdict.bot::before { content: "✓"; color: var(--good); font-weight: 700; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 16px; }
+.tile { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 26px; font-weight: 600; }
+.tile .note { color: var(--text-muted); font-size: 12px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 20px 0 4px; position: sticky; top: 0; background: var(--page); padding: 10px 0; z-index: 5; }
+.filters .lbl { color: var(--text-secondary); font-size: 13px; margin-right: 4px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; background: none; color: var(--text-primary); border: 0; padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--wash); font-weight: 600; }
+.seg button:focus-visible, .ev-head:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+.theme { margin-left: auto; }
+.ev { border-top: 1px solid var(--grid); }
+.ev:first-of-type { border-top: 0; }
+.ev-head { display: flex; gap: 12px; align-items: baseline; padding: 14px 0; cursor: pointer; list-style: none; }
+.ev-head::-webkit-details-marker { display: none; }
+.ev-head .n { color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 22px; }
+.ev-head .t { font-weight: 600; flex: 1; }
+.ev-head .chev { color: var(--text-muted); transition: transform .15s; }
+details[open] > .ev-head .chev { transform: rotate(90deg); }
+.ev-body { padding: 0 0 18px 34px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); margin: 8px 0; }
+.legend .key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.legend .dot { border-radius: 50%; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--text-muted); font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; }
+svg text.ink { fill: var(--text-secondary); }
+svg text.strong { fill: var(--text-primary); font-weight: 600; }
+.gl { stroke: var(--grid); stroke-width: 1; }
+.base { stroke: var(--axis); stroke-width: 1; }
+.s1 { fill: var(--series-1); }
+.s2 { fill: var(--series-2); }
+.hit { fill: transparent; cursor: default; }
+.mark { transition: opacity .1s; }
+.mark.lift { opacity: .75; }
+.ring { stroke: var(--surface-1); stroke-width: 2; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--text-secondary); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.x { color: var(--critical); font-weight: 600; }
+.ok { color: var(--good); font-weight: 600; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 14px 0 6px; position: relative; }
+.step { padding: 0 10px 0 0; position: relative; }
+.step .bar { height: 4px; background: var(--grid); border-radius: 2px; margin-bottom: 10px; }
+.step.hot .bar { background: var(--series-2); }
+.step .d { font-weight: 600; }
+.step .w { color: var(--text-secondary); font-size: 13px; }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--wash); padding: 1px 5px; border-radius: 4px; }
+pre { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--wash); padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+#tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.12); display: none; z-index: 10; max-width: 280px; }
+#tip .v { font-weight: 600; font-size: 15px; }
+#tip .r { color: var(--text-secondary); }
+#tip .k { display: inline-block; width: 12px; height: 2px; vertical-align: middle; margin-right: 6px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 720px) { .two, .hero { grid-template-columns: 1fr; } .steps { grid-template-columns: 1fr 1fr; row-gap: 12px; } }
+.tablewrap { max-height: 360px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<div class="wrap">
+
+<p class="muted">Android · Commure Ambient (com.athelas.scribe) · analysis 2026-10-29 · data: Crashlytics Aug 1 – Oct 29, Play Console</p>
+<h1>The top two Android crashes are automated testers, not clinicians</h1>
+<p class="sub">YubiKeyPromptActivity.onMAMCreate NullPointerException and MAMResolverActivity.onMAMCreate NullPointerException (both Intune MAM) top the 3.42.1 crash list. Every one of these crashes traces back to two devices that behave like an automated test fleet. No evidence points to a real user.</p>
+
+<div class="card hero">
+  <div><div class="num">0</div><div class="muted">real users affected</div></div>
+  <div>
+    <span class="verdict bot">Verdict: automated testing (most likely Google Play app review)</span>
+    <p>Eight independent checks all point the same way. The strongest:</p>
+    <p>(1) Play's <b>Android vitals</b>, which counts only real users, shows <b>neither crash</b>.<br>(2) The 3.42.1 crash burst happened on <b>Oct 23, two days before the build was public</b> (released Oct 25).<br>(3) One of the two devices reports an <b>x86_64 CPU on a phone that only exists as ARM</b>, so it can only be an emulator.</p>
+  </div>
+</div>
+
+<div class="filters" role="group" aria-label="Filters">
+  <span class="lbl">Issue</span>
+  <div class="seg" id="issueSeg">
+    <button data-v="all" aria-pressed="true">Both</button>
+    <button data-v="yubikey" aria-pressed="false">YubiKeyPromptActivity</button>
+    <button data-v="resolver" aria-pressed="false">MAMResolverActivity</button>
+  </div>
+  <div class="seg theme" id="themeSeg" aria-label="Theme">
+    <button data-v="auto" aria-pressed="true">Auto</button>
+    <button data-v="light" aria-pressed="false">Light</button>
+    <button data-v="dark" aria-pressed="false">Dark</button>
+  </div>
+</div>
+
+<div class="tiles" id="tiles"></div>
+
+<div class="card">
+<h2>The evidence</h2>
+<p class="muted">Click a row to expand it. The charts follow the issue filter above.</p>
+
+<details class="ev" open>
+<summary class="ev-head" tabindex="0"><span class="n">1</span><span class="t">Only two device models have ever hit these crashes, and every install on them crashes</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<p>Across 90 days, <b>every single event</b> comes from one of two device models, both reporting Android 11. Across our 2,204 weekly Android users, no other model has hit either crash even once. On 3.42.1, <b>every install</b> on these two models crashed: 7 of 7, 3 of 3, 6 of 6 and 4 of 4 in Crashlytics' per-device totals. A real user population never crashes at 100%.</p>
+<div class="legend" id="devLegend"></div>
+<div id="devChart"></div>
+</div>
+</details>
+
+<details class="ev" open>
+<summary class="ev-head" tabindex="0"><span class="n">2</span><span class="t">The hardware they report doesn't exist</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<table>
+<thead><tr><th>Reported device</th><th>Reported CPU</th><th>Reported OS</th><th>What the real phone has</th><th>Read</th></tr></thead>
+<tbody>
+<tr><td>OnePlus 8 Pro</td><td>x86_64</td><td>Android 11</td><td>Snapdragon 865, <b>ARM64 only</b></td><td class="x">Impossible → emulator</td></tr>
+<tr><td>Huawei HRY-LX1T (Honor 10 Lite)</td><td>ARM64</td><td>Android 11</td><td>Shipped with Android 9. We know of no official Android 11 build.</td><td class="x">Implausible → test image</td></tr>
+</tbody>
+</table>
+<p>Crashlytics sees 345 OnePlus 8 Pro users overall, so real (ARM) owners of this phone do exist. <b>All 79 crash events from this model are from the x86_64 build</b>, and none from a real ARM phone.</p>
+</div>
+</details>
+
+<details class="ev" open>
+<summary class="ev-head" tabindex="0"><span class="n">3</span><span class="t">The 3.42.1 crashes all fall in one 4-hour window, before the build was public</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<div class="steps">
+  <div class="step"><div class="bar"></div><div class="d">Oct 21</div><div class="w">3.42.1 (1015) uploaded to Play (pre-launch report date)</div></div>
+  <div class="step hot"><div class="bar"></div><div class="d">Oct 23 · 06:48–10:28 UTC</div><div class="w">All 35 crash events of both issues</div></div>
+  <div class="step"><div class="bar"></div><div class="d">Oct 25</div><div class="w">Released on Google Play (Production → Releases)</div></div>
+  <div class="step"><div class="bar"></div><div class="d">Oct 26 onward</div><div class="w">Real users on 3.42.1: zero events of either crash</div></div>
+</div>
+<p>On Oct 23 the public couldn't install 3.42.1 yet. The two devices took turns, installing fresh roughly every 10–30 minutes. Each dot below is one install, with hover for its crashes.</p>
+<div class="legend" id="burstLegend"></div>
+<div id="burstChart"></div>
+</div>
+</details>
+
+<details class="ev">
+<summary class="ev-head" tabindex="0"><span class="n">4</span><span class="t">Every build gets the same burst, right after it's built</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<p>This isn't specific to 3.42.1. Since August, almost every build shows the same two devices crashing in a burst of a few hours. That includes builds Crashlytics only ever saw on about 10 devices. That's how a review or test pipeline behaves: it runs once per submitted build. It also explains why Crashlytics keeps flagging these issues as <i>regressed</i> after they're closed.</p>
+<div class="legend" id="buildLegend"></div>
+<div id="buildChart"></div>
+</div>
+</details>
+
+<details class="ev">
+<summary class="ev-head" tabindex="0"><span class="n">5</span><span class="t">Each install crashes 1–3 times within seconds, then is never seen again</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<div class="two">
+<div><div id="installChart"></div></div>
+<div>
+<p>Crashlytics flags 100% of these events as <b>happening in the first second of the session</b>. Grouped by install ID:</p>
+<p id="installText"></p>
+<p>If a real clinician hit this crash at launch, they would open the app again and crash again, so we would see more events on later days. Instead each install goes quiet after its first few seconds. No install appears under both issues either, which fits a script that installs fresh for every pass.</p>
+</div>
+</div>
+</div>
+</details>
+
+<details class="ev">
+<summary class="ev-head" tabindex="0"><span class="n">6</span><span class="t">Play Console: Android vitals shows neither crash</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<p>Android vitals is filled in by Google from <b>real users' devices that share diagnostics</b>. For <b>3.42.1</b> over the last 28 days, it lists only one crash type:</p>
+<table>
+<thead><tr><th>Issue in Android vitals (3.42.1)</th><th class="num">Users</th><th class="num">Events</th><th>Dates</th></tr></thead>
+<tbody>
+<tr><td><code>ForegroundServiceDidNotStopInTimeException</code> (3 groups)</td><td class="num">6</td><td class="num">6</td><td>Oct 27–29</td></tr>
+<tr><td>YubiKeyPromptActivity NullPointerException</td><td class="num">—</td><td class="num">0</td><td class="muted">not listed</td></tr>
+<tr><td>MAMResolverActivity NullPointerException</td><td class="num">—</td><td class="num">0</td><td class="muted">not listed</td></tr>
+</tbody>
+</table>
+<p class="muted">The vitals chart has no events at all on Oct 23. The only crash that real users hit is the ForegroundService one, which is a separate issue.</p>
+</div>
+</details>
+
+<details class="ev">
+<summary class="ev-head" tabindex="0"><span class="n">7</span><span class="t">Not Play's pre-launch report, and not our own CI</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<table>
+<thead><tr><th>Candidate source</th><th>Check</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Real users</td><td>Android vitals; public release date</td><td class="x">Ruled out: no vitals events, and the build wasn't public on Oct 23</td></tr>
+<tr><td>Play pre-launch report (Firebase Test Lab)</td><td>Pre-launch report for 1015 (3.42.1)</td><td class="x">Ruled out: tested on 1 device (Google Medium Phone, Arm, virtual, Android 16), with "No issues found"</td></tr>
+<tr><td>Our BrowserStack CI</td><td><code>.github/workflows/android_*</code></td><td class="x">Ruled out: installs <b>debug</b> APKs on Samsung/Pixel devices, and these crashes are from the release build</td></tr>
+<tr><td>Internal testers</td><td>Device profile</td><td class="x">Unlikely: nobody installs about 20 times in 4 hours on an x86 emulator and an Android 11 Huawei</td></tr>
+<tr><td><b>Google Play app review</b></td><td>Timing; device profile</td><td class="ok">Fits: runs per submission before release, uses emulators and test devices, and shows developers no results</td></tr>
+</tbody>
+</table>
+<p class="muted">The pipeline that ran the test is <b>inferred</b> because Google doesn't publish its review run. Ruling out real users does <b>not</b> depend on that inference: checks 1, 2, 3 and 6 settle that on their own.</p>
+</div>
+</details>
+
+<details class="ev">
+<summary class="ev-head" tabindex="0"><span class="n">8</span><span class="t">Why a bot reaches these screens and a person doesn't</span><span class="chev">›</span></summary>
+<div class="ev-body">
+<p>Both screens belong to libraries. <code>MAMResolverActivity</code> is part of the Intune SDK, and <code>YubiKeyPromptActivity</code> is part of YubiKit, which MSAL pulls in for smart-card sign-in. Neither can be opened from outside the app (the SDK manifest declares <code>exported="false"</code>). Both stack traces start with Android <b>re-creating the screen in a fresh process</b>:</p>
+<pre>Caused by: java.lang.NullPointerException
+  at com.yubico.yubikit.android.ui.YubiKeyPromptActivity.onMAMCreate (YubiKeyPromptActivity.java:210)
+  at com.microsoft.intune.mam.client.app.offline.OfflineActivityBehavior.onCreate (OfflineActivityBehavior.java:122)
+  at com.microsoft.intune.mam.client.app.MAMActivity.onCreate (MAMActivity.java:80)</pre>
+<p>The SDK's in-memory state is gone at that point, so the screen finds a null value and crashes. Automated testers kill and restore the app constantly to look for crashes. A clinician almost never gets the process killed while one of these short-lived screens is open. The <code>noHistory="true"</code> we already set on MAMResolverActivity can't help, because it only stops a screen being restored after the user has left it.</p>
+</div>
+</details>
+</div>
+
+<div class="card">
+<h2>What we're doing about it</h2>
+<p><b>Nothing in the app.</b> The crash is in third-party code, and only an automated tester triggers it.</p>
+<p><b>Reporting:</b> label these issues "Play review automation, 0 real users" and leave them out of the weekly crash-free rate. Together the six Intune/MSAL startup crashes on these two devices hit roughly 1 percentage point of weekly crash-free users. <b>When a closed issue reopens after a release</b>, check Android vitals. If the crash isn't there, it's the same noise.</p>
+<p class="muted">We considered turning Crashlytics off on emulators. We rejected it: it would only catch the x86 device, not the Huawei, and it would stop crash reports from real x86 users such as Chromebooks.</p>
+</div>
+
+<div class="card">
+<h2>All events</h2>
+<p class="muted">Every Crashlytics event for both issues, Aug 1 – Oct 29 (follows the filter). Install IDs are shortened Crashlytics installation UUIDs.</p>
+<div class="tablewrap"><table id="evTable"><thead><tr><th>Time (UTC)</th><th>Issue</th><th>Device</th><th>CPU</th><th>Android</th><th>Build</th><th>Install</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+</div>
+
+<script>
+const EV = [{"i":"yubikey","t":"2026-10-28T12:55:07Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1016)","u":"E1AF54FF"},{"i":"yubikey","t":"2026-10-28T09:12:53Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1016)","u":"24AF24F7"},{"i":"yubikey","t":"2026-10-28T06:56:58Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.0 (1016)","u":"39080438"},{"i":"yubikey","t":"2026-10-23T10:28:40Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"23B11F28"},{"i":"yubikey","t":"2026-10-23T10:25:05Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"0BC752B4"},{"i":"yubikey","t":"2026-10-23T10:25:00Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"0BC752B4"},{"i":"yubikey","t":"2026-10-23T09:26:00Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"8A64243B"},{"i":"yubikey","t":"2026-10-23T09:12:08Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"73C4E44A"},{"i":"yubikey","t":"2026-10-23T09:12:04Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"73C4E44A"},{"i":"yubikey","t":"2026-10-23T08:43:53Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"AE6B9FD9"},{"i":"yubikey","t":"2026-10-23T08:43:51Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"AE6B9FD9"},{"i":"yubikey","t":"2026-10-23T08:43:47Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"AE6B9FD9"},{"i":"yubikey","t":"2026-10-23T08:29:14Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"B32E90C4"},{"i":"yubikey","t":"2026-10-23T08:29:11Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"B32E90C4"},{"i":"yubikey","t":"2026-10-23T08:29:08Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"B32E90C4"},{"i":"yubikey","t":"2026-10-23T07:52:54Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"B9ED50E7"},{"i":"yubikey","t":"2026-10-23T07:25:54Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"DDD2E7B2"},{"i":"yubikey","t":"2026-10-23T07:25:50Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"DDD2E7B2"},{"i":"yubikey","t":"2026-10-23T07:01:07Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"293E309A"},{"i":"yubikey","t":"2026-10-23T07:01:05Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"293E309A"},{"i":"yubikey","t":"2026-10-23T07:01:01Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"293E309A"},{"i":"yubikey","t":"2026-10-23T07:00:34Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"4A9CA8C3"},{"i":"yubikey","t":"2026-10-15T12:16:44Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1009)","u":"688B26CF"},{"i":"yubikey","t":"2026-10-14T07:18:53Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1009)","u":"F9BEED10"},{"i":"yubikey","t":"2026-10-14T06:51:12Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.0 (1009)","u":"512B0835"},{"i":"yubikey","t":"2026-10-06T07:04:50Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"6934A027"},{"i":"yubikey","t":"2026-10-05T11:36:20Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.41.0 (1006)","u":"B4E04170"},{"i":"yubikey","t":"2026-10-05T07:21:02Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"75EE0FCF"},{"i":"yubikey","t":"2026-10-05T07:20:58Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"75EE0FCF"},{"i":"yubikey","t":"2026-10-04T08:10:54Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"A70671F9"},{"i":"yubikey","t":"2026-10-04T08:10:47Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"A70671F9"},{"i":"yubikey","t":"2026-10-04T07:57:06Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.41.0 (1007)","u":"AEB855E6"},{"i":"yubikey","t":"2026-10-04T07:12:39Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"A8062A87"},{"i":"yubikey","t":"2026-10-01T10:19:25Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1001)","u":"BECC1456"},{"i":"yubikey","t":"2026-10-01T10:19:20Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1001)","u":"BECC1456"},{"i":"yubikey","t":"2026-10-01T08:06:09Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1001)","u":"0BDA45E4"},{"i":"yubikey","t":"2026-10-01T07:56:42Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.41.0 (1001)","u":"47353860"},{"i":"yubikey","t":"2026-09-29T19:42:16Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.41.0 (1000)","u":"E21472D7"},{"i":"yubikey","t":"2026-09-29T11:41:00Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1000)","u":"0F159543"},{"i":"yubikey","t":"2026-09-29T11:06:35Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1000)","u":"9495CF54"},{"i":"yubikey","t":"2026-09-24T08:03:22Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.1 (999)","u":"31D0C8B3"},{"i":"yubikey","t":"2026-09-24T07:12:16Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.1 (999)","u":"3786BF37"},{"i":"yubikey","t":"2026-09-20T10:21:07Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.4 (995)","u":"6BC2BDC5"},{"i":"yubikey","t":"2026-09-20T09:58:24Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (995)","u":"A5CF4569"},{"i":"yubikey","t":"2026-09-20T09:58:19Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (995)","u":"A5CF4569"},{"i":"yubikey","t":"2026-09-20T09:13:30Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (995)","u":"8291A775"},{"i":"yubikey","t":"2026-09-20T08:59:16Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (995)","u":"2E14EC3B"},{"i":"yubikey","t":"2026-09-19T22:24:16Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.4 (995)","u":"E5583881"},{"i":"yubikey","t":"2026-09-19T22:24:13Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.4 (995)","u":"E5583881"},{"i":"yubikey","t":"2026-09-18T08:46:56Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"EC70244E"},{"i":"yubikey","t":"2026-09-18T08:11:18Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"F7B65F93"},{"i":"yubikey","t":"2026-09-18T07:41:37Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"8AB459EB"},{"i":"yubikey","t":"2026-09-18T07:41:33Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"8AB459EB"},{"i":"yubikey","t":"2026-09-18T07:21:50Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.2 (986)","u":"59DD0657"},{"i":"yubikey","t":"2026-09-18T07:21:50Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"74D59390"},{"i":"yubikey","t":"2026-09-16T08:00:25Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.40.0 (983)","u":"4B746CAF"},{"i":"yubikey","t":"2026-09-16T08:00:21Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.40.0 (983)","u":"4B746CAF"},{"i":"yubikey","t":"2026-09-15T12:59:29Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"C081D6A0"},{"i":"yubikey","t":"2026-09-15T12:59:25Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"C081D6A0"},{"i":"yubikey","t":"2026-09-15T11:37:32Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"85109DEF"},{"i":"yubikey","t":"2026-09-15T11:37:27Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"85109DEF"},{"i":"yubikey","t":"2026-09-14T14:45:38Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"00572F3E"},{"i":"yubikey","t":"2026-09-14T07:31:59Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.0 (981)","u":"C104A2ED"},{"i":"yubikey","t":"2026-09-14T07:31:56Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.0 (981)","u":"C104A2ED"},{"i":"yubikey","t":"2026-09-14T06:52:43Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"1B6C3F3B"},{"i":"yubikey","t":"2026-09-14T06:52:37Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"1B6C3F3B"},{"i":"yubikey","t":"2026-09-14T06:52:33Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"1B6C3F3B"},{"i":"yubikey","t":"2026-09-02T11:50:38Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.38.1 (970)","u":"04E8175F"},{"i":"yubikey","t":"2026-08-06T10:59:21Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.36.0 (941)","u":"CC6CC96A"},{"i":"resolver","t":"2026-10-28T08:27:39Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.0 (1016)","u":"1DC66574"},{"i":"resolver","t":"2026-10-28T06:51:59Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.0 (1016)","u":"8BF1D604"},{"i":"resolver","t":"2026-10-28T06:51:57Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.0 (1016)","u":"8BF1D604"},{"i":"resolver","t":"2026-10-28T06:51:53Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.0 (1016)","u":"8BF1D604"},{"i":"resolver","t":"2026-10-23T10:24:46Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"60685646"},{"i":"resolver","t":"2026-10-23T10:21:13Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"B26A989A"},{"i":"resolver","t":"2026-10-23T10:21:11Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"B26A989A"},{"i":"resolver","t":"2026-10-23T10:21:06Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"B26A989A"},{"i":"resolver","t":"2026-10-23T09:08:22Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"E65F19EA"},{"i":"resolver","t":"2026-10-23T09:08:17Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"E65F19EA"},{"i":"resolver","t":"2026-10-23T09:08:13Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"E65F19EA"},{"i":"resolver","t":"2026-10-23T08:40:00Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"86669815"},{"i":"resolver","t":"2026-10-23T08:39:56Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"86669815"},{"i":"resolver","t":"2026-10-23T08:25:20Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"6CA34395"},{"i":"resolver","t":"2026-10-23T08:02:18Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.1 (1015)","u":"B124E43F"},{"i":"resolver","t":"2026-10-23T07:22:07Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"1D0469B5"},{"i":"resolver","t":"2026-10-23T07:22:02Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"1D0469B5"},{"i":"resolver","t":"2026-10-23T06:57:14Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"3F5E7149"},{"i":"resolver","t":"2026-10-23T06:56:25Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"A3B45AE9"},{"i":"resolver","t":"2026-10-23T06:48:12Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.1 (1015)","u":"F89D9572"},{"i":"resolver","t":"2026-10-14T07:50:56Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.42.0 (1009)","u":"75991D84"},{"i":"resolver","t":"2026-10-14T07:25:15Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1009)","u":"41309670"},{"i":"resolver","t":"2026-10-14T07:22:28Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1009)","u":"B4462BF8"},{"i":"resolver","t":"2026-10-14T07:22:26Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1009)","u":"B4462BF8"},{"i":"resolver","t":"2026-10-14T07:22:22Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1009)","u":"B4462BF8"},{"i":"resolver","t":"2026-10-14T07:15:04Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.42.0 (1009)","u":"1C090121"},{"i":"resolver","t":"2026-10-04T08:06:53Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"A33524D6"},{"i":"resolver","t":"2026-10-04T08:06:47Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"A33524D6"},{"i":"resolver","t":"2026-10-04T07:52:50Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.41.0 (1007)","u":"94B2E8FF"},{"i":"resolver","t":"2026-10-04T07:08:53Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"9C5CEF88"},{"i":"resolver","t":"2026-10-04T07:08:50Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"9C5CEF88"},{"i":"resolver","t":"2026-10-04T07:08:47Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1007)","u":"9C5CEF88"},{"i":"resolver","t":"2026-10-01T10:15:32Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1001)","u":"5ED0F0DC"},{"i":"resolver","t":"2026-10-01T08:02:14Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1001)","u":"F78AD0E9"},{"i":"resolver","t":"2026-10-01T07:52:52Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.41.0 (1001)","u":"1D2203B3"},{"i":"resolver","t":"2026-09-29T15:47:13Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.41.0 (1000)","u":"DC003A8E"},{"i":"resolver","t":"2026-09-29T15:40:52Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1000)","u":"54A72925"},{"i":"resolver","t":"2026-09-29T11:41:54Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1000)","u":"CA088252"},{"i":"resolver","t":"2026-09-29T11:36:55Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1000)","u":"CA088252"},{"i":"resolver","t":"2026-09-29T11:36:51Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1000)","u":"CA088252"},{"i":"resolver","t":"2026-09-29T11:00:49Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.41.0 (1000)","u":"528CE218"},{"i":"resolver","t":"2026-09-24T07:59:35Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.1 (999)","u":"A671EAB5"},{"i":"resolver","t":"2026-09-24T07:26:37Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.40.1 (999)","u":"C7BC3FCD"},{"i":"resolver","t":"2026-09-24T07:26:31Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.40.1 (999)","u":"C7BC3FCD"},{"i":"resolver","t":"2026-09-24T07:08:27Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.1 (999)","u":"AFF3BFC3"},{"i":"resolver","t":"2026-09-21T19:56:59Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (994)","u":"3DC7DFAF"},{"i":"resolver","t":"2026-09-20T09:54:32Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (995)","u":"924DADCC"},{"i":"resolver","t":"2026-09-20T09:33:29Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.4 (995)","u":"CD25FC49"},{"i":"resolver","t":"2026-09-20T09:09:57Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (995)","u":"9DDA4D86"},{"i":"resolver","t":"2026-09-20T08:55:27Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.4 (995)","u":"A8E060D4"},{"i":"resolver","t":"2026-09-20T07:44:43Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.4 (995)","u":"6BC779B4"},{"i":"resolver","t":"2026-09-19T22:20:28Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.4 (995)","u":"05FCBAD9"},{"i":"resolver","t":"2026-09-19T22:20:25Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.4 (995)","u":"05FCBAD9"},{"i":"resolver","t":"2026-09-18T08:07:34Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"A648D239"},{"i":"resolver","t":"2026-09-18T07:37:50Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"CD36DFE3"},{"i":"resolver","t":"2026-09-18T07:37:48Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"CD36DFE3"},{"i":"resolver","t":"2026-09-18T07:37:45Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"CD36DFE3"},{"i":"resolver","t":"2026-09-18T07:21:39Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.2 (986)","u":"81FD08B2"},{"i":"resolver","t":"2026-09-18T07:19:18Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.2 (986)","u":"92A9263C"},{"i":"resolver","t":"2026-09-16T07:56:39Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.40.0 (983)","u":"B95CF7FB"},{"i":"resolver","t":"2026-09-16T07:56:38Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.40.0 (983)","u":"B95CF7FB"},{"i":"resolver","t":"2026-09-16T07:56:34Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.40.0 (983)","u":"B95CF7FB"},{"i":"resolver","t":"2026-09-15T12:55:38Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"9F08B8A5"},{"i":"resolver","t":"2026-09-15T12:55:35Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"9F08B8A5"},{"i":"resolver","t":"2026-09-15T11:33:44Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"93418BE6"},{"i":"resolver","t":"2026-09-15T11:33:43Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.40.0 (983)","u":"93418BE6"},{"i":"resolver","t":"2026-09-14T14:40:51Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"4AD493F6"},{"i":"resolver","t":"2026-09-14T07:27:35Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.0 (981)","u":"FF1731BF"},{"i":"resolver","t":"2026-09-14T07:27:32Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.0 (981)","u":"FF1731BF"},{"i":"resolver","t":"2026-09-14T07:27:29Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.39.0 (981)","u":"FF1731BF"},{"i":"resolver","t":"2026-09-14T06:48:45Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"081CF967"},{"i":"resolver","t":"2026-09-14T06:48:43Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"081CF967"},{"i":"resolver","t":"2026-09-14T06:48:39Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.39.0 (981)","u":"081CF967"},{"i":"resolver","t":"2026-09-03T19:30:34Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.38.1 (973)","u":"3069DDD2"},{"i":"resolver","t":"2026-09-02T11:46:46Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.38.1 (970)","u":"BA5BF1DB"},{"i":"resolver","t":"2026-08-17T10:11:30Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.37.0 (955)","u":"DC41B87C"},{"i":"resolver","t":"2026-08-17T10:11:27Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.37.0 (955)","u":"DC41B87C"},{"i":"resolver","t":"2026-08-09T11:20:16Z","d":"HRY-LX1T","a":"ARM64","os":"11","v":"3.36.0 (941)","u":"01A8A8D2"},{"i":"resolver","t":"2026-08-06T10:55:29Z","d":"OnePlus8Pro","a":"X86_64","os":"11","v":"3.36.0 (941)","u":"EDAFEA35"}];
+const DEV = {
+  "OnePlus8Pro": { label: "“OnePlus 8 Pro” · x86_64 emulator", cls: "s1", v: "--series-1" },
+  "HRY-LX1T": { label: "Huawei HRY-LX1T · ARM64, Android 11", cls: "s2", v: "--series-2" },
+};
+const DEVS = Object.keys(DEV);
+const ISS = { yubikey: "YubiKeyPromptActivity NPE", resolver: "MAMResolverActivity NPE" };
+const NS = "http://www.w3.org/2000/svg";
+const state = { issue: "all" };
+const tip = document.getElementById("tip");
+
+function S(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function txt(parent, x, y, s, cls, anchor) {
+  const t = S("text", { x, y, "text-anchor": anchor || "start" }, parent);
+  if (cls) t.setAttribute("class", cls);
+  t.textContent = s;
+  return t;
+}
+function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+const cssVar = v => getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(v).trim();
+const D = s => new Date(s);
+const fmtT = d => d.toISOString().slice(5, 16).replace("T", " ");
+
+function showTip(evt, value, rows) {
+  tip.replaceChildren();
+  tip.appendChild(el("div", "v", value));
+  for (const [color, label] of rows) {
+    const r = el("div", "r");
+    if (color) { const k = el("span", "k"); k.style.background = cssVar(color); r.appendChild(k); }
+    r.appendChild(document.createTextNode(label));
+    tip.appendChild(r);
+  }
+  tip.style.display = "block";
+  moveTip(evt);
+}
+function moveTip(evt) {
+  const r = evt.target.getBoundingClientRect ? evt.target.getBoundingClientRect() : null;
+  let x = evt.clientX, y = evt.clientY;
+  if ((x == null || evt.type === "focus") && r) { x = r.left + r.width / 2; y = r.top; }
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(window.innerWidth - w - 8, x + 14) + "px";
+  tip.style.top = Math.max(8, y - h - 10) + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+function bindHover(hit, mark, value, rows) {
+  hit.setAttribute("tabindex", "0");
+  hit.setAttribute("aria-label", value + ". " + rows.map(r => r[1]).join(". "));
+  const on = e => { if (mark) mark.classList.add("lift"); showTip(e, value, rows); };
+  const off = () => { if (mark) mark.classList.remove("lift"); hideTip(); };
+  hit.addEventListener("pointerenter", on);
+  hit.addEventListener("pointermove", moveTip);
+  hit.addEventListener("pointerleave", off);
+  hit.addEventListener("focus", on);
+  hit.addEventListener("blur", off);
+}
+
+function filtered() { return state.issue === "all" ? EV : EV.filter(e => e.i === state.issue); }
+
+function legend(id, dots) {
+  const box = document.getElementById(id);
+  box.replaceChildren();
+  for (const d of DEVS) {
+    const s = el("span");
+    const k = el("span", "key" + (dots ? " dot" : ""));
+    k.style.background = cssVar(DEV[d].v);
+    s.appendChild(k);
+    s.appendChild(document.createTextNode(DEV[d].label));
+    box.appendChild(s);
+  }
+}
+
+function renderTiles(ev) {
+  const installs = new Set(ev.map(e => e.u)).size;
+  const models = new Set(ev.map(e => e.d)).size;
+  const v421 = ev.filter(e => e.v.startsWith("3.42.1")).length;
+  const tiles = [
+    ["Crash events (90 days)", ev.length.toLocaleString(), "Aug 1 – Oct 29"],
+    ["Distinct installs", installs, "each one seen only for seconds"],
+    ["Device models", models, "out of every Android model we see"],
+    ["Events on 3.42.1", v421, "all on Oct 23, before release"],
+    ["In Android vitals", "0", "vitals counts real users only"],
+  ];
+  const box = document.getElementById("tiles");
+  box.replaceChildren();
+  for (const [l, v, n] of tiles) {
+    const t = el("div", "tile");
+    t.appendChild(el("div", "label", l)); t.appendChild(el("div", "value", String(v))); t.appendChild(el("div", "note", n));
+    box.appendChild(t);
+  }
+}
+
+// 1. Events by device (horizontal bars, one per device)
+function renderDev(ev) {
+  const host = document.getElementById("devChart"); host.replaceChildren();
+  const W = 760, rowH = 34, L = 250, R = 60, H = DEVS.length * rowH + 30;
+  const svg = S("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Crash events by device" }, host);
+  const max = Math.max(1, ...DEVS.map(d => ev.filter(e => e.d === d).length));
+  const nice = Math.ceil(max / 20) * 20;
+  const x = v => L + (W - L - R) * v / nice;
+  for (let t = 0; t <= nice; t += nice / 4) {
+    S("line", { x1: x(t), x2: x(t), y1: 0, y2: H - 24, class: "gl" }, svg);
+    txt(svg, x(t), H - 8, String(t), "", "middle");
+  }
+  S("line", { x1: L, x2: L, y1: 0, y2: H - 24, class: "base" }, svg);
+  DEVS.forEach((d, i) => {
+    const n = ev.filter(e => e.d === d).length;
+    const inst = new Set(ev.filter(e => e.d === d).map(e => e.u)).size;
+    const y = i * rowH + 8, h = 18;
+    txt(svg, L - 10, y + 13, DEV[d].label, "ink", "end");
+    const w = Math.max(0, x(n) - L);
+    const p = S("path", { d: barPath(L, y, w, h), class: "mark " + DEV[d].cls }, svg);
+    txt(svg, L + w + 6, y + 13, n + " events", "strong");
+    const hit = S("rect", { x: L, y: y - 6, width: Math.max(w + 70, 30), height: h + 12, class: "hit" }, svg);
+    bindHover(hit, p, n + " crash events", [[DEV[d].v, DEV[d].label], [null, inst + " distinct installs"], [null, "Android 11 on every event"]]);
+  });
+}
+function barPath(x, y, w, h) { // square at baseline, 4px rounded data end
+  if (w <= 0) return "";
+  const r = Math.min(4, w, h / 2);
+  return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z`;
+}
+
+// 3. Burst on Oct 23 — one dot per install
+function renderBurst(ev) {
+  const host = document.getElementById("burstChart"); host.replaceChildren();
+  const list = ev.filter(e => e.v.startsWith("3.42.1"));
+  const t0 = D("2026-10-23T06:30:00Z").getTime(), t1 = D("2026-10-23T10:45:00Z").getTime();
+  const W = 760, L = 250, R = 20, laneH = 46, H = DEVS.length * laneH + 34;
+  const svg = S("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "3.42.1 crash installs over time on Oct 23 UTC" }, host);
+  const x = t => L + (W - L - R) * (t - t0) / (t1 - t0);
+  for (let h = 7; h <= 10; h++) {
+    const t = D(`2026-10-23T${String(h).padStart(2, "0")}:00:00Z`).getTime();
+    S("line", { x1: x(t), x2: x(t), y1: 0, y2: H - 24, class: "gl" }, svg);
+    txt(svg, x(t), H - 8, `${String(h).padStart(2, "0")}:00`, "", "middle");
+  }
+  txt(svg, L - 10, H - 8, "Time (UTC, Oct 23)", "", "end");
+  const byInst = {};
+  for (const e of list) (byInst[e.u] ||= []).push(e);
+  DEVS.forEach((d, i) => {
+    const cy = i * laneH + 20;
+    txt(svg, L - 10, cy + 4, DEV[d].label, "ink", "end");
+    S("line", { x1: L, x2: W - R, y1: cy, y2: cy, class: "gl" }, svg);
+  });
+  for (const [u, es] of Object.entries(byInst)) {
+    es.sort((a, b) => a.t.localeCompare(b.t));
+    const d = es[0].d, i = DEVS.indexOf(d), cy = i * laneH + 20;
+    const ts = es.map(e => D(e.t).getTime());
+    const cx = x(ts[0]);
+    const span = Math.round((ts[ts.length - 1] - ts[0]) / 1000);
+    const c = S("circle", { cx, cy, r: 5 + (es.length - 1) * 1.5, class: "mark ring " + DEV[d].cls }, svg);
+    const hit = S("circle", { cx, cy, r: 12, class: "hit" }, svg);
+    const issues = [...new Set(es.map(e => ISS[e.i]))].join(", ");
+    bindHover(hit, c, `${es.length} crash${es.length > 1 ? "es" : ""} in ${span}s`, [[DEV[d].v, DEV[d].label], [null, "Install " + u + "…"], [null, issues], [null, "First: " + es[0].t.slice(11, 19) + " UTC"]]);
+  }
+  if (!list.length) txt(svg, W / 2, H / 2, "No 3.42.1 events for this filter", "ink", "middle");
+}
+
+// 4. Events per build (stacked by device)
+function renderBuilds(ev) {
+  const host = document.getElementById("buildChart"); host.replaceChildren();
+  const byV = {};
+  for (const e of ev) { (byV[e.v] ||= { first: e.t, d: {} }); const b = byV[e.v]; if (e.t < b.first) b.first = e.t; b.d[e.d] = (b.d[e.d] || 0) + 1; }
+  const rows = Object.entries(byV).sort((a, b) => a[1].first.localeCompare(b[1].first));
+  const W = 760, L = 250, R = 50, rowH = 24, H = rows.length * rowH + 30;
+  const svg = S("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Crash events per app build, stacked by device" }, host);
+  const max = Math.max(1, ...rows.map(([, b]) => Object.values(b.d).reduce((s, n) => s + n, 0)));
+  const nice = Math.ceil(max / 10) * 10;
+  const x = v => (W - L - R) * v / nice;
+  for (let t = 0; t <= nice; t += nice / 4) {
+    S("line", { x1: L + x(t), x2: L + x(t), y1: 0, y2: H - 24, class: "gl" }, svg);
+    txt(svg, L + x(t), H - 8, String(t), "", "middle");
+  }
+  S("line", { x1: L, x2: L, y1: 0, y2: H - 24, class: "base" }, svg);
+  rows.forEach(([v, b], i) => {
+    const y = i * rowH + 4, h = 14;
+    const lab = txt(svg, L - 10, y + 11, "", "ink", "end");
+    lab.textContent = v + "  ·  " + b.first.slice(5, 10);
+    let cx = L;
+    const total = Object.values(b.d).reduce((s, n) => s + n, 0);
+    const present = DEVS.filter(d => b.d[d]);
+    present.forEach((d, j) => {
+      const n = b.d[d];
+      const last = j === present.length - 1;
+      const w = Math.max(1, x(n) - (last ? 0 : 2));
+      const p = last ? S("path", { d: barPath(cx, y, w, h), class: "mark " + DEV[d].cls }, svg)
+                     : S("rect", { x: cx, y, width: w, height: h, class: "mark " + DEV[d].cls }, svg);
+      const hit = S("rect", { x: cx, y: y - 4, width: w + 2, height: h + 8, class: "hit" }, svg);
+      bindHover(hit, p, `${n} events`, [[DEV[d].v, DEV[d].label], [null, "Build " + v], [null, "Burst started " + b.first.slice(0, 16).replace("T", " ") + " UTC"]]);
+      cx += x(n);
+    });
+    txt(svg, cx + 6, y + 11, String(total), "strong");
+  });
+  const lg = document.getElementById("buildLegend"); legend("buildLegend");
+  const n = el("span", null, "Row label: build · date of first crash (UTC)"); n.style.color = cssVar("--text-muted"); lg.appendChild(n);
+}
+
+// 5. Crashes per install
+function renderInstalls(ev) {
+  const host = document.getElementById("installChart"); host.replaceChildren();
+  const byInst = {};
+  for (const e of ev) (byInst[e.u] ||= []).push(D(e.t).getTime());
+  const counts = { 1: 0, 2: 0, 3: 0 };
+  const spans = [];
+  for (const ts of Object.values(byInst)) { counts[Math.min(3, ts.length)]++; spans.push((Math.max(...ts) - Math.min(...ts)) / 1000); }
+  const W = 360, H = 220, B = 190, T = 24, colW = 24;
+  const svg = S("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Number of installs by crashes per install" }, host);
+  const max = Math.max(1, ...Object.values(counts));
+  const nice = Math.ceil(max / 20) * 20;
+  const y = v => B - (B - T) * v / nice;
+  for (let t = 0; t <= nice; t += nice / 4) { S("line", { x1: 40, x2: W, y1: y(t), y2: y(t), class: "gl" }, svg); txt(svg, 32, y(t) + 4, String(t), "", "end"); }
+  S("line", { x1: 40, x2: W, y1: B, y2: B, class: "base" }, svg);
+  [1, 2, 3].forEach((k, i) => {
+    const cx = 40 + (W - 40) * (i + 0.5) / 3, h = B - y(counts[k]);
+    const r = Math.min(4, h);
+    const p = S("path", { d: h > 0 ? `M${cx - colW / 2},${B}V${B - h + r}Q${cx - colW / 2},${B - h} ${cx - colW / 2 + r},${B - h}H${cx + colW / 2 - r}Q${cx + colW / 2},${B - h} ${cx + colW / 2},${B - h + r}V${B}Z` : "", class: "mark s1" }, svg);
+    txt(svg, cx, B - h - 6, String(counts[k]), "strong", "middle");
+    txt(svg, cx, B + 16, `${k} crash${k > 1 ? "es" : ""}`, "ink", "middle");
+    const hit = S("rect", { x: cx - 40, y: T, width: 80, height: B - T + 20, class: "hit" }, svg);
+    bindHover(hit, p, `${counts[k]} installs`, [[null, `crashed ${k} time${k > 1 ? "s" : ""}, then never returned`]]);
+  });
+  txt(svg, 40, 12, "Installs, by crashes per install", "ink");
+  spans.sort((a, b) => a - b);
+  const total = spans.length;
+  const under10 = spans.filter(s => s <= 10).length;
+  const pt = document.getElementById("installText");
+  pt.replaceChildren();
+  pt.append(`${total} installs. For ${under10} of them, the first and last crash are at most 10 seconds apart. The longest gap is ${Math.round(spans[spans.length - 1])} seconds. `);
+  const b = el("b", null, "No install has a single crash on any later day."); pt.appendChild(b);
+}
+
+function renderTable(ev) {
+  const tb = document.querySelector("#evTable tbody"); tb.replaceChildren();
+  for (const e of [...ev].sort((a, b) => b.t.localeCompare(a.t))) {
+    const tr = el("tr");
+    for (const v of [e.t.replace("T", " ").replace("Z", ""), ISS[e.i], e.d, e.a, e.os, e.v, e.u + "…"]) tr.appendChild(el("td", null, v));
+    tb.appendChild(tr);
+  }
+}
+
+function render() {
+  const ev = filtered();
+  renderTiles(ev);
+  legend("devLegend"); renderDev(ev);
+  legend("burstLegend", true); renderBurst(ev);
+  renderBuilds(ev);
+  renderInstalls(ev);
+  renderTable(ev);
+}
+
+function seg(id, fn) {
+  const box = document.getElementById(id);
+  box.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    for (const x of box.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+    fn(b.dataset.v);
+  });
+}
+seg("issueSeg", v => { state.issue = v; render(); });
+seg("themeSeg", v => {
+  if (v === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", v);
+  render();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+render();
+</script>
+</body>
+</html>

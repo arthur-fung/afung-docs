@@ -1,0 +1,658 @@
+---
+title: "Why does a scribe end up INCOMPLETE? (interactive explainer)"
+layout: null
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why does a scribe end up INCOMPLETE?</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --wash: rgba(11,11,11,0.04);
+    --series-1: #2a78d6;   /* no speech, >=30 s audio */
+    --series-2: #1baf7a;   /* no speech, <30 s audio */
+    --series-3: #eb6834;   /* not enough info */
+    --good: #0ca30c;
+    --good-text: #006300;
+    --warning: #fab219;
+    --critical: #d03b3b;
+    --neutral-band: #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface-1: #1a1a19;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.05);
+      --series-1: #3987e5; --series-2: #199e70; --series-3: #d95926;
+      --good-text: #0ca30c; --neutral-band: #383835;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.05);
+    --series-1: #3987e5; --series-2: #199e70; --series-3: #d95926;
+    --good-text: #0ca30c; --neutral-band: #383835;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page); color: var(--text-primary);
+    min-height: 100vh; padding: 32px 20px 80px; line-height: 1.5;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 0 0 4px; }
+  h3 { font-size: 15px; margin: 0 0 6px; }
+  .sub { color: var(--text-secondary); margin: 0 0 16px; }
+  .muted { color: var(--text-muted); font-size: 13px; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 22px; margin: 18px 0;
+  }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 200px; }
+  .tile { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .big { font-size: 30px; font-weight: 650; }
+  .tile .lbl { color: var(--text-secondary); font-size: 13px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+  button, .chip {
+    font: inherit; font-size: 14px; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover, .chip:hover { background: var(--wash); }
+  button[aria-pressed="true"] { border-color: var(--text-primary); font-weight: 600; }
+  .topbar { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--wash); padding: 1px 5px; border-radius: 4px; }
+
+  /* tldr */
+  .tldr { font-size: 17px; }
+  .tldr b { font-weight: 650; }
+
+  /* pipeline */
+  .scen { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 18px; }
+  .pipe { display: flex; gap: 0; align-items: stretch; margin: 8px 0 14px; overflow-x: auto; }
+  .stage {
+    flex: 1 1 0; min-width: 130px; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; text-align: center; position: relative; transition: all .25s;
+    background: var(--surface-1);
+  }
+  .stage .ico { font-size: 22px; }
+  .stage .nm { font-weight: 600; font-size: 14px; }
+  .stage .who { font-size: 12px; color: var(--text-muted); }
+  .stage .st { font-size: 12.5px; margin-top: 6px; min-height: 34px; color: var(--text-secondary); }
+  .stage.pass { border-color: var(--good); }
+  .stage.fail { border-color: var(--critical); border-width: 2px; }
+  .stage.warn { border-color: var(--warning); border-width: 2px; }
+  .stage.skip { opacity: .35; }
+  .arrow { display: flex; align-items: center; padding: 0 4px; color: var(--text-muted); }
+  .outcome { border-radius: 10px; padding: 14px 16px; border: 2px solid var(--border); }
+  .outcome .badge { display: inline-block; font-weight: 700; font-size: 13px; padding: 2px 10px; border-radius: 999px; color: #fff; margin-right: 8px; }
+  .b-incomplete { background: #b26b00; }
+  .b-error { background: var(--critical); }
+  .b-complete { background: #0a7a0a; }
+
+  /* word checker */
+  textarea {
+    width: 100%; min-height: 70px; font: inherit; font-size: 15px; padding: 10px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--page); color: var(--text-primary);
+  }
+  .meter { height: 10px; background: var(--neutral-band); border-radius: 999px; overflow: hidden; margin: 8px 0; }
+  .meter > div { height: 100%; border-radius: 999px; transition: width .2s; }
+
+  /* charts */
+  svg text { fill: var(--text-muted); font-size: 12px; font-family: inherit; }
+  svg .lab { fill: var(--text-secondary); font-size: 12px; }
+  svg .val { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); margin: 6px 0 4px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); border-radius: 8px; padding: 8px 10px; font-size: 13px; max-width: 280px;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .next { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .next .tile h3 { margin-bottom: 4px; }
+  /* paths -> reasons */
+  .paths { position: relative; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); column-gap: 120px; }
+  .paths-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .paths-left { display: flex; flex-direction: column; gap: 6px; }
+  .grp { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-top: 8px; }
+  .grp:first-child { margin-top: 0; }
+  .pchip {
+    text-align: left; border-radius: 8px; padding: 7px 10px; border-left: 4px solid var(--rc);
+    font-size: 13.5px; width: 100%; position: relative; z-index: 1;
+  }
+  .pchip.on { background: var(--wash); border-color: var(--rc); border-left-width: 4px; font-weight: 600; }
+  .paths-right { display: flex; flex-direction: column; justify-content: space-around; gap: 16px; position: relative; z-index: 1; }
+  .reason { border: 1px solid var(--border); border-top: 4px solid var(--rc); border-radius: 10px; padding: 12px 14px; background: var(--surface-1); transition: box-shadow .15s; }
+  .reason.on { box-shadow: 0 0 0 2px var(--rc); }
+  .reason .lbl { font-size: 13px; color: var(--text-secondary); }
+  .reason .cnt { font-size: 13px; font-weight: 600; margin-top: 6px; }
+  .paths-lines path { fill: none; stroke-width: 2; opacity: .35; transition: opacity .15s; }
+  .paths-lines path.on { opacity: 1; stroke-width: 3; }
+  @media (max-width: 640px) {
+    .paths { grid-template-columns: 1fr; row-gap: 14px; }
+    .paths-lines { display: none; }
+  }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <h1>Why does a scribe end up “INCOMPLETE”?</h1>
+      <p class="sub">A plain-language guide to the code paths, combined with the findings from
+        <a href="https://app.notion.com/p/athelas-public/Ambient-Frontend-Reliability-10-19-10-25-406f92a633f28195bd1ef606bbafd6ab" target="_blank">Ambient Frontend Reliability 10/19–10/25</a>.</p>
+    </div>
+    <button id="themeBtn" title="Toggle light/dark">◐ Theme</button>
+  </div>
+
+  <!-- TL;DR -->
+  <div class="card tldr">
+    <p style="margin-top:0"><b>INCOMPLETE is not a crash.</b> It means the recording reached us, but there was
+      <b>nothing usable to write a note from</b>. The provider sees a scribe with no note.</p>
+    <p style="margin-bottom:0">There are <b>two reasons</b> a scribe gets this status. The code checks for them in seven places (see the next section).</p>
+    <div class="row" style="margin-top:12px">
+      <div class="tile">
+        <div class="lbl"><span class="swatch" style="background:var(--series-1)"></span>1. “No speech detected”</div>
+        <div class="big">607</div>
+        <div class="lbl">this week (70%). The audio file was there, but our transcription service heard no one talking.
+          <b>412 of these had 30 s or more of audio</b>, so the mic was recording silence.</div>
+      </div>
+      <div class="tile">
+        <div class="lbl"><span class="swatch" style="background:var(--series-3)"></span>2. “Not enough info in the transcript”</div>
+        <div class="big">261</div>
+        <div class="lbl">this week (30%). Someone talked, but the transcript had <b>fewer than 10 words</b>
+          (5 for nursing accounts). Usually a very short recording.</div>
+      </div>
+      <div class="tile">
+        <div class="lbl">Incomplete rate, 10/19–10/25</div>
+        <div class="big">0.242%</div>
+        <div class="lbl">868 of 358,108 scribes. Highest in 5 weeks (was 0.212%).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PATHS -> REASONS -->
+  <div class="card">
+    <h2>7 places in the code, 2 reasons</h2>
+    <p class="sub">Seven places in the code can mark a scribe INCOMPLETE, and each one checks one of the same two things.
+      Hover a place to see what it does; click it to try it in the pipeline below.</p>
+    <div class="paths" id="paths">
+      <svg class="paths-lines" id="pathLines" aria-hidden="true"></svg>
+      <div class="paths-left" id="pathLeft"></div>
+      <div class="paths-right">
+        <div class="reason" id="reason-ns" style="--rc:var(--series-1)">
+          <div class="tag">Reason 1</div><h3>No speech detected</h3>
+          <div class="lbl">The transcription service heard no one talking.</div>
+          <div class="cnt">3 places · 607 this week</div>
+        </div>
+        <div class="reason" id="reason-nei" style="--rc:var(--series-3)">
+          <div class="tag">Reason 2</div><h3>Too few words in the transcript</h3>
+          <div class="lbl">Under 10 words (5 for nursing accounts), plain-English text only.</div>
+          <div class="cnt">4 places · 261 this week</div>
+        </div>
+      </div>
+    </div>
+    <div class="muted" id="pathInfo" style="min-height:40px;margin-top:10px;font-size:14px;color:var(--text-secondary)">Hover a place on the left.</div>
+    <p class="muted" style="margin-bottom:0">We don’t record which place set the status, so the weekly counts can’t be split by place.
+      The report groups by the saved reason message. Regenerating a note saves no message, so any scribes it marks don’t appear in that breakdown.</p>
+  </div>
+
+  <!-- SIMULATOR -->
+  <div class="card">
+    <h2>Follow a recording through the pipeline</h2>
+    <p class="sub">Pick a situation and see where it stops and what status the scribe gets.</p>
+    <div class="scen" id="scen"></div>
+    <div class="pipe" id="pipe"></div>
+    <div class="outcome" id="outcome"></div>
+  </div>
+
+  <!-- WORD CHECK PLAYGROUND -->
+  <div class="card">
+    <h2>Try the word-count check yourself</h2>
+    <p class="sub">After transcription, the backend counts the words in the transcript. Type a transcript below.
+      This uses the same rule as the code.</p>
+    <textarea id="wc" spellcheck="false">Okay, let's get started.</textarea>
+    <div class="controls">
+      <label class="chip"><input type="checkbox" id="nurse"> Account has the nursing “allow short recording” flag (limit 5 words)</label>
+      <button data-ex="Patient reports a headache for two days, no fever, taking ibuprofen twice daily.">Real visit</button>
+      <button data-ex="Testing, testing.">Mic test</button>
+      <button data-ex="Dolor de cabeza desde ayer.">Short Spanish</button>
+      <button data-ex="">Empty</button>
+    </div>
+    <div class="meter"><div id="wcbar"></div></div>
+    <div id="wcout"></div>
+    <p class="muted" style="margin-bottom:0">Quirk: the limit only applies when every character is plain English letters, numbers or punctuation.
+      Any accented or non-Latin character (é, ñ, 中) skips the check, so a 2-word Spanish transcript still goes to note generation.</p>
+  </div>
+
+  <!-- TREND -->
+  <div class="card">
+    <h2>Incomplete scribes per week</h2>
+    <p class="sub">The increase this week comes almost entirely from “no speech” recordings that had real length (silent mic).</p>
+    <div class="legend" id="trendLegend"></div>
+    <div class="controls">
+      <button id="trendTableBtn" aria-pressed="false">Show as table</button>
+    </div>
+    <div id="trend"></div>
+    <div id="trendTable" hidden></div>
+  </div>
+
+  <!-- PLATFORM -->
+  <div class="card">
+    <h2>Which platforms are out of their normal range?</h2>
+    <p class="sub">The gray bar is each platform’s range over the previous 4 weeks. The dot is this week.
+      A red dot means this week is above that range.</p>
+    <div class="controls">
+      <button id="lowVolBtn" aria-pressed="false">Include low-volume platforms (Safari, Edge extension)</button>
+    </div>
+    <div id="plat"></div>
+    <p class="muted">WEB_APP - CHROME is the clear outlier (0.75% vs 0.45–0.66%), on web 7.11.x, the same platform and build as the
+      recovery regression. WEB_CHROME (no browser) and WEB_APP - EDGE are also just above their range, by small amounts.
+      Safari is always about 5–8%, but it is only about 300 scribes a week.</p>
+  </div>
+
+  <!-- AUDIO LEVEL -->
+  <div class="card">
+    <h2>What “recording silence” looks like</h2>
+    <p class="sub">Deep dive on account 273882 (11 “no speech” scribes on WEB_APP - CHROME 7.11.x). Hover the bands.</p>
+    <div id="db"></div>
+    <div class="row" style="margin-top:6px">
+      <div class="tile"><h3>Recording and upload worked</h3><div class="lbl">Every recording had 1 valid audio part and a file size that matched its length.</div></div>
+      <div class="tile"><h3>The mic was on, but nearly silent</h3><div class="lbl">Not muted (above −150 dBFS) but 40+ dB quieter than speech. This fits a wrong input device or zero gain.</div></div>
+      <div class="tile"><h3>The warning didn’t stop anyone</h3><div class="lbl"><code>LOW_AUDIO_DETECTED</code> fired in 9 of 11 recordings (188 times). The provider finished anyway, and retried 6 times in 30 minutes.</div></div>
+    </div>
+  </div>
+
+  <!-- SURPRISES -->
+  <div class="card">
+    <h2>Things that might surprise you</h2>
+    <div class="next">
+      <div class="tile"><h3>Errors ≠ incomplete</h3><div class="lbl">Corrupt audio, audio under 1 second and unknown failures become <b>ERROR</b>, not INCOMPLETE. Only “no speech” and “too few words” become INCOMPLETE.</div></div>
+      <div class="tile"><h3>Regenerating can make a note INCOMPLETE</h3><div class="lbl">If a provider asks to regenerate a note and the existing note plus the request is under 10 words, the scribe flips to INCOMPLETE, with no reason message saved.</div></div>
+      <div class="tile"><h3>One errored chunk isn’t enough</h3><div class="lbl">With several audio parts, the scribe is only marked when <b>every</b> part failed transcription. If one part has speech, the note is generated from that.</div></div>
+      <div class="tile"><h3>Status can be half-updated</h3><div class="lbl">Some paths update the status but not the separate status ID column, and one marks the scribe INCOMPLETE while its tasks become ERROR. Queries on the ID column may undercount.</div></div>
+    </div>
+  </div>
+
+  <!-- NEXT STEPS -->
+  <div class="card">
+    <h2>Where we could reduce incomplete scribes</h2>
+    <div class="next">
+      <div class="tile"><span class="tag">Biggest lever · client</span><h3>Make the low-audio warning blocking</h3><div class="lbl">Targets the 412 silent-mic scribes a week. Show the selected input device so the provider can switch it before the visit is lost.</div></div>
+      <div class="tile"><span class="tag">Telemetry · client</span><h3>Log input device and gain</h3><div class="lbl">Add them to <code>PARALLEL_RECORDING_STARTED</code> so we can confirm “wrong mic” instead of guessing from dBFS.</div></div>
+      <div class="tile"><span class="tag">Investigate · web</span><h3>Check mic selection in web 7.11.x on Chrome</h3><div class="lbl">“No speech” rate rose 0.41% → 0.58% → 0.69% across 7.10.0 → 7.11.0 → 7.11.1 (small numbers; about 11 from one account).</div></div>
+      <div class="tile"><span class="tag">Support</span><h3>Upgrade account 6462 off web 7.08</h3><div class="lbl">25 incomplete scribes this week, up from 1 the week before.</div></div>
+    </div>
+  </div>
+
+  <!-- TECHNICAL -->
+  <div class="card">
+    <details>
+      <summary>Technical appendix: where this lives in the code</summary>
+      <p class="muted">Status value: <code>ScribeTaskStatus.INCOMPLETE</code> in <code>app/api/v1/workflows/models.py</code>.
+        Word rule: <code>is_transcription_length_sufficient</code> in <code>app/api/v1/scribe/workflows/services.py</code>
+        (<code>TRANSCRIPTION_LOWER_LIMIT = 10</code>, <code>SHORT_RECORDING_TRANSCRIPTION_LOWER_LIMIT = 5</code>).
+        Errands references are from the local checkout dated Oct 12.</p>
+      <table>
+        <thead><tr><th>Reason</th><th>Endpoint / function</th><th>File</th></tr></thead>
+        <tbody>
+          <tr><td>No speech</td><td><code>POST /workflows/workflow_status_callback</code> (errands sends <code>status="INCOMPLETE"</code> when the error contains “No speech detected”; only applied if every pre-recorded transcription errored)</td><td><code>workflows/controllers.py:1333</code></td></tr>
+          <tr><td>No speech</td><td><code>POST /callback_for_errands_scribe_status</code> (legacy, non-workflow scribes)</td><td><code>openai/controllers.py:2167</code></td></tr>
+          <tr><td>No speech</td><td><code>POST /workflows/transcription_callback</code> → <code>mark_scribe_status_based_on_transcription_error</code> (all transcriptions errored with NO_SPEECH / TOO_SHORT)</td><td><code>workflows/services.py:244</code></td></tr>
+          <tr><td>Not enough info</td><td><code>POST /workflows/transcription_callback</code> → <code>check_transcription_ocr_status_and_trigger_errands</code></td><td><code>workflows/services.py:359</code></td></tr>
+          <tr><td>Not enough info</td><td><code>POST /callback_for_new_transcription</code> (legacy)</td><td><code>openai/controllers.py:2381</code></td></tr>
+          <tr><td>Not enough info</td><td><code>POST /modify_clinical_documentation_with_audio</code> (regenerate)</td><td><code>openai/controllers.py:3074</code></td></tr>
+          <tr><td>Not enough info</td><td><code>POST /retool/custom_trigger</code> → <code>trigger_custom_workflow</code> (NQME)</td><td><code>note_quality_metrics_engine/services.py:673</code></td></tr>
+        </tbody>
+      </table>
+      <p class="muted">Errands sources: <code>errands/jobs/transcribe/controllers.py:116</code> (<code>SCRIBE_INCOMPLETE_ERRORS</code>),
+        <code>errands/jobs/transcribe/services.py:1056</code> (audio length after processing is 0 → “No speech detected in audio file.”).</p>
+    </details>
+  </div>
+
+</div>
+<div id="tip"></div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+};
+const tip = $("#tip");
+const showTip = (e, html) => {
+  tip.innerHTML = html; tip.style.display = "block";
+  const x = Math.min(e.clientX + 14, window.innerWidth - 300);
+  tip.style.left = x + "px"; tip.style.top = (e.clientY + 14) + "px";
+};
+const hideTip = () => (tip.style.display = "none");
+
+/* theme toggle */
+$("#themeBtn").onclick = () => {
+  const root = document.documentElement;
+  const cur = root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  root.dataset.theme = cur === "dark" ? "light" : "dark";
+};
+
+/* ---------- pipeline simulator ---------- */
+const STAGES = [
+  { ico: "🎙️", nm: "Record", who: "Provider’s device" },
+  { ico: "☁️", nm: "Upload", who: "Device → server" },
+  { ico: "👂", nm: "Listen for speech", who: "Transcription service (errands)" },
+  { ico: "🔢", nm: "Word-count check", who: "Backend (normandy)" },
+  { ico: "📝", nm: "Write the note", who: "AI note generation" },
+];
+// each step: [state, text]; state: pass | fail | warn | skip
+const SCENARIOS = [
+  {
+    id: "normal", label: "Normal visit",
+    steps: [["pass","15 min of conversation"],["pass","Audio arrives"],["pass","Speech found"],["pass","180 words, over the limit"],["pass","Note written"]],
+    out: ["complete", "COMPLETED", "The provider gets a note. This is where almost every scribe ends up."],
+  },
+  {
+    id: "mic", label: "Wrong or muted mic",
+    steps: [["warn","Mic records near-silence. Low-audio warning shows, but recording continues"],["pass","Audio arrives, full length"],["fail","No speech found"],["skip",""],["skip",""]],
+    out: ["incomplete", "INCOMPLETE · “No speech detected”", "This is the #1 cause: 412 scribes this week had 30 s or more of audio and still no speech. A blocking low-audio warning would catch these before the visit ends."],
+  },
+  {
+    id: "short", label: "Very short recording",
+    steps: [["pass","10 seconds: “Okay, let’s get started.”"],["pass","Audio arrives"],["pass","Speech found"],["fail","4 words, under the 10-word limit"],["skip",""]],
+    out: ["incomplete", "INCOMPLETE · “Not enough info in the transcript”", "261 scribes this week. Mostly recordings under 2 minutes, which looks like user behavior (mis-starts, tests) rather than a bug."],
+  },
+  {
+    id: "nurse", label: "Short nursing note",
+    steps: [["pass","“BP 120 over 80, patient resting comfortably.”"],["pass","Audio arrives"],["pass","Speech found"],["pass","7 words. Nursing flag lowers the limit to 5"],["pass","Note written"]],
+    out: ["complete", "COMPLETED", "Accounts with the nursing “allow short recording” flag only need 5 words."],
+  },
+  {
+    id: "spanish", label: "Short visit in Spanish",
+    steps: [["pass","“Dolor de cabeza desde ayer.”"],["pass","Audio arrives"],["pass","Speech found"],["pass","5 words, but the accented letter skips the check"],["pass","Note written (thin)"]],
+    out: ["complete", "COMPLETED", "The word limit only applies to plain-English text. Any non-English character lets the transcript through."],
+  },
+  {
+    id: "corrupt", label: "Corrupt audio file",
+    steps: [["pass","Recording finishes"],["pass","File arrives, but it’s damaged"],["fail","Can’t decode the audio"],["skip",""],["skip",""]],
+    out: ["error", "ERROR · “audio issues”", "Not INCOMPLETE. Damaged files, audio under 1 second and unknown failures all become ERROR."],
+  },
+  {
+    id: "regen", label: "Regenerate an empty note",
+    steps: [["skip",""],["skip",""],["skip",""],["fail","Existing note + “fix typo” is under 10 words"],["skip",""]],
+    out: ["incomplete", "INCOMPLETE · no reason saved", "A scribe can go from COMPLETED to INCOMPLETE when a provider regenerates it with too little content."],
+  },
+];
+function renderScenario(id) {
+  const s = SCENARIOS.find((x) => x.id === id);
+  document.querySelectorAll("#scen button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.id === id));
+  const pipe = $("#pipe"); pipe.innerHTML = "";
+  STAGES.forEach((st, i) => {
+    const [state, txt] = s.steps[i];
+    const mark = { pass: "✓", fail: "✕", warn: "⚠", skip: "" }[state];
+    const d = document.createElement("div");
+    d.className = "stage " + state;
+    d.innerHTML = `<div class="ico">${st.ico}</div><div class="nm">${st.nm} ${mark}</div><div class="who">${st.who}</div><div class="st">${txt || (state === "skip" ? "Not reached" : "")}</div>`;
+    pipe.appendChild(d);
+    if (i < STAGES.length - 1) {
+      const a = document.createElement("div"); a.className = "arrow"; a.textContent = "→"; pipe.appendChild(a);
+    }
+  });
+  const [kind, title, body] = s.out;
+  $("#outcome").innerHTML = `<span class="badge b-${kind}">${kind.toUpperCase()}</span><b>${title}</b><div class="muted" style="margin-top:6px;font-size:14px;color:var(--text-secondary)">${body}</div>`;
+}
+SCENARIOS.forEach((s) => {
+  const b = document.createElement("button");
+  b.textContent = s.label; b.dataset.id = s.id; b.onclick = () => renderScenario(s.id);
+  $("#scen").appendChild(b);
+});
+renderScenario("mic");
+
+/* ---------- 7 places -> 2 reasons ---------- */
+const PATHS = [
+  { grp: "New recording (current app)", name: "Transcription service reports no speech", reason: "ns", scen: "mic",
+    ep: "POST /workflows/workflow_status_callback",
+    info: "Errands couldn’t find speech and reports it back. Only applied when every audio part failed, so one good part still gets a note." },
+  { grp: "New recording (current app)", name: "Every audio part failed with “no speech” or “too short”", reason: "ns", scen: "mic",
+    ep: "POST /workflows/transcription_callback",
+    info: "When the last transcription comes back and none of them have text, the backend looks at why. “No speech” or “too short” → INCOMPLETE; corrupt or unknown → ERROR." },
+  { grp: "New recording (current app)", name: "Transcript has too few words", reason: "nei", scen: "short",
+    ep: "POST /workflows/transcription_callback",
+    info: "Transcription worked, but the combined transcript is under the word limit, so no note is generated." },
+  { grp: "Older app versions (legacy)", name: "Transcription service reports no speech", reason: "ns", scen: "mic",
+    ep: "POST /callback_for_errands_scribe_status",
+    info: "Same idea as the current path, for scribes created without a workflow. There’s no “every part failed” check here." },
+  { grp: "Older app versions (legacy)", name: "Transcript has too few words", reason: "nei", scen: "short",
+    ep: "POST /callback_for_new_transcription",
+    info: "Same word-count check, for scribes created without a workflow." },
+  { grp: "Regenerating a note", name: "Existing note + requested change is too short", reason: "nei", scen: "regen",
+    ep: "POST /modify_clinical_documentation_with_audio",
+    info: "A provider asks to regenerate. If the old note plus the request is under 10 words, a completed scribe can flip to INCOMPLETE. No reason message is saved." },
+  { grp: "Internal Retool tool", name: "Text pasted in Retool is too short", reason: "nei", scen: "short",
+    ep: "POST /retool/custom_trigger",
+    info: "An internal tool (note quality metrics) that generates a note from pasted text. Same word-count check." },
+];
+const REASON_COLOR = { ns: "var(--series-1)", nei: "var(--series-3)" };
+const pathLeft = $("#pathLeft");
+let lastGrp = null;
+PATHS.forEach((p, i) => {
+  if (p.grp !== lastGrp) {
+    const g = document.createElement("div"); g.className = "grp"; g.textContent = p.grp; pathLeft.appendChild(g); lastGrp = p.grp;
+  }
+  const b = document.createElement("button");
+  b.className = "pchip"; b.style.setProperty("--rc", REASON_COLOR[p.reason]); b.dataset.i = i;
+  b.textContent = p.name; b.title = p.ep;
+  b.onmouseenter = b.onfocus = () => highlightPath(i);
+  b.onclick = () => { highlightPath(i); renderScenario(p.scen); document.querySelector("#scen").scrollIntoView({ behavior: "smooth", block: "center" }); };
+  pathLeft.appendChild(b);
+});
+function drawPathLines() {
+  const svg = $("#pathLines"); svg.innerHTML = "";
+  const box = $("#paths").getBoundingClientRect();
+  document.querySelectorAll(".pchip").forEach((c) => {
+    const p = PATHS[c.dataset.i];
+    const a = c.getBoundingClientRect(), r = $("#reason-" + p.reason).getBoundingClientRect();
+    const x1 = a.right - box.left, y1 = a.top + a.height / 2 - box.top;
+    const x2 = r.left - box.left, y2 = r.top + r.height / 2 - box.top;
+    const mx = (x1 + x2) / 2;
+    el("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, stroke: REASON_COLOR[p.reason], "data-i": c.dataset.i }, svg);
+  });
+}
+function highlightPath(i) {
+  const p = PATHS[i];
+  document.querySelectorAll(".pchip").forEach((c) => c.classList.toggle("on", +c.dataset.i === i));
+  document.querySelectorAll("#pathLines path").forEach((l) => l.classList.toggle("on", +l.dataset.i === i));
+  document.querySelectorAll(".reason").forEach((r) => r.classList.toggle("on", r.id === "reason-" + p.reason));
+  $("#pathInfo").innerHTML = `<b>${p.name}</b> <code>${p.ep}</code><br>${p.info}`;
+}
+drawPathLines();
+window.addEventListener("resize", drawPathLines);
+
+/* ---------- word check playground (mirrors is_transcription_length_sufficient) ---------- */
+const ENGLISH = /^[a-zA-Z0-9\s.,?!'"-:;(){}[\]@#$%^&*+=<>~]+$/;
+function checkWords() {
+  const text = $("#wc").value;
+  const limit = $("#nurse").checked ? 5 : 10;
+  const words = text.trim() ? text.trim().split(/\s+/) : [];
+  const n = words.length;
+  let ok, why;
+  if (!text) { ok = false; why = "Empty transcript."; }
+  else if (n >= limit) { ok = true; why = `${n} words, meets the ${limit}-word limit.`; }
+  else if (!ENGLISH.test(text)) { ok = true; why = `Only ${n} words, but it contains a non-English character, so the limit is skipped.`; }
+  else { ok = false; why = `${n} words, under the ${limit}-word limit.`; }
+  const bar = $("#wcbar");
+  bar.style.width = Math.min(100, (n / limit) * 100) + "%";
+  bar.style.background = ok ? "var(--good)" : "var(--critical)";
+  $("#wcout").innerHTML = ok
+    ? `<span class="badge b-complete" style="display:inline-block;color:#fff;border-radius:999px;padding:2px 10px;font-weight:700;font-size:13px;margin-right:8px">PASSES</span>${why} A note will be generated.`
+    : `<span class="badge b-incomplete" style="display:inline-block;color:#fff;border-radius:999px;padding:2px 10px;font-weight:700;font-size:13px;margin-right:8px">INCOMPLETE</span>${why} “There was not enough info in the transcript to generate a clinical note.”`;
+}
+$("#wc").addEventListener("input", checkWords);
+$("#nurse").addEventListener("change", checkWords);
+document.querySelectorAll("[data-ex]").forEach((b) => (b.onclick = () => { $("#wc").value = b.dataset.ex; checkWords(); }));
+checkWords();
+
+/* ---------- weekly trend: stacked bars ---------- */
+const WEEKS = ["9/21–9/27", "9/28–10/4", "10/5–10/11", "10/12–10/18", "10/19–10/25"];
+const NS30 = [342, 380, 336, 339, 412];
+const NSALL = [559, 546, 522, 501, 607];
+const NEI = [249, 232, 244, 229, 261];
+const TOTAL = [344472, 345466, 345898, 344835, 358108];
+const SERIES = [
+  { key: "ns30", name: "No speech, ≥30 s of audio (silent mic)", color: "var(--series-1)", vals: NS30 },
+  { key: "nsshort", name: "No speech, <30 s of audio", color: "var(--series-2)", vals: NSALL.map((v, i) => v - NS30[i]) },
+  { key: "nei", name: "Not enough info (too few words)", color: "var(--series-3)", vals: NEI },
+];
+$("#trendLegend").innerHTML = SERIES.map((s) => `<span><span class="swatch" style="background:${s.color}"></span>${s.name}</span>`).join("");
+function drawTrend() {
+  const W = 900, H = 300, m = { l: 44, r: 16, t: 24, b: 34 };
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "Incomplete scribes per week, stacked by reason" });
+  const max = 1000, y = (v) => m.t + (H - m.t - m.b) * (1 - v / max);
+  for (let g = 0; g <= max; g += 250) {
+    el("line", { x1: m.l, x2: W - m.r, y1: y(g), y2: y(g), stroke: g ? "var(--grid)" : "var(--axis)" }, svg);
+    el("text", { x: m.l - 8, y: y(g) + 4, "text-anchor": "end", style: "font-variant-numeric:tabular-nums" }, svg).textContent = g;
+  }
+  const band = (W - m.l - m.r) / WEEKS.length, bw = Math.min(72, band * 0.5);
+  WEEKS.forEach((wk, i) => {
+    const cx = m.l + band * i + band / 2;
+    let acc = 0;
+    SERIES.forEach((s, si) => {
+      const v = s.vals[i];
+      const y0 = y(acc), y1 = y(acc + v);
+      const top = si === SERIES.length - 1;
+      const h = Math.max(0, y0 - y1 - 2); // 2px surface gap
+      const r = el("path", { d: top
+        ? `M${cx - bw/2},${y0 - 2} V${y1 + 4} Q${cx - bw/2},${y1} ${cx - bw/2 + 4},${y1} H${cx + bw/2 - 4} Q${cx + bw/2},${y1} ${cx + bw/2},${y1 + 4} V${y0 - 2} Z`
+        : `M${cx - bw/2},${y0} V${y0 - h} H${cx + bw/2} V${y0} Z`, fill: s.color }, svg);
+      acc += v;
+    });
+    const tot = NSALL[i] + NEI[i];
+    el("text", { x: cx, y: y(tot) - 7, "text-anchor": "middle", class: "val" }, svg).textContent = tot;
+    el("text", { x: cx, y: H - 12, "text-anchor": "middle", class: i === 4 ? "val" : "lab" }, svg).textContent = wk;
+    // hit target: whole column
+    const hit = el("rect", { x: m.l + band * i, y: m.t, width: band, height: H - m.t - m.b, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", (e) => showTip(e,
+      `<b>${wk}</b><br>` + SERIES.map((s) => `<span class="swatch" style="background:${s.color}"></span>${s.name}: <b>${s.vals[i]}</b>`).join("<br>") +
+      `<br><span class="muted">Total ${tot} of ${TOTAL[i].toLocaleString()} scribes (${(tot / TOTAL[i] * 100).toFixed(3)}%)</span>`));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+  $("#trend").innerHTML = ""; $("#trend").appendChild(svg);
+  $("#trendTable").innerHTML = `<table><thead><tr><th>Week</th>${SERIES.map((s) => `<th class="num">${s.name}</th>`).join("")}<th class="num">Total</th><th class="num">Rate</th></tr></thead><tbody>` +
+    WEEKS.map((wk, i) => `<tr><td>${wk}</td>${SERIES.map((s) => `<td class="num">${s.vals[i]}</td>`).join("")}<td class="num">${NSALL[i] + NEI[i]}</td><td class="num">${((NSALL[i] + NEI[i]) / TOTAL[i] * 100).toFixed(3)}%</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+drawTrend();
+$("#trendTableBtn").onclick = (e) => {
+  const on = e.target.getAttribute("aria-pressed") !== "true";
+  e.target.setAttribute("aria-pressed", on);
+  e.target.textContent = on ? "Show as chart" : "Show as table";
+  $("#trend").hidden = on; $("#trendTable").hidden = !on;
+};
+
+/* ---------- platform range plot ---------- */
+const PLAT = [
+  { p: "MOBILE_IOS", r: [0.11, 0.10, 0.10, 0.10, 0.11], n: "238 / 225,959" },
+  { p: "WEB_APP (no browser)", r: [0.57, 0.50, 0.47, 0.48, 0.52], n: "319 / 61,861" },
+  { p: "MOBILE_ANDROID", r: [0.18, 0.12, 0.14, 0.12, 0.12], n: "27 / 22,514" },
+  { p: "WEB_APP - CHROME", r: [0.47, 0.66, 0.58, 0.45, 0.75], n: "94 / 12,523" },
+  { p: "WEB_CHROME - CHROME", r: [0.42, 0.59, 0.50, 0.68, 0.60], n: "73 / 12,244" },
+  { p: "WEB_CHROME (no browser)", r: [0.22, 0.22, 0.22, 0.22, 0.27], n: "34 / 12,534" },
+  { p: "WEB_APP - EDGE", r: [0.48, 0.59, 0.61, 0.46, 0.62], n: "60 / 9,653" },
+  { p: "WEB_APP - SAFARI", r: [6.70, 0.65, 8.50, 4.74, 5.95], n: "20 / 336", low: true },
+  { p: "WEB_CHROME - EDGE", r: [0.63, 1.05, 0.28, 0.22, 0.70], n: "3 / 430", low: true },
+];
+let showLow = false;
+function drawPlat() {
+  const rows = PLAT.filter((d) => showLow || !d.low);
+  const W = 900, rowH = 34, m = { l: 190, r: 70, t: 10, b: 30 };
+  const H = m.t + m.b + rows.length * rowH;
+  const max = showLow ? 9 : 1;
+  const x = (v) => m.l + (W - m.l - m.r) * (v / max);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "Incomplete rate by platform vs prior 4-week range" });
+  const step = showLow ? 1 : 0.2;
+  for (let g = 0; g <= max + 1e-9; g += step) {
+    el("line", { x1: x(g), x2: x(g), y1: m.t, y2: H - m.b, stroke: g ? "var(--grid)" : "var(--axis)" }, svg);
+    el("text", { x: x(g), y: H - 10, "text-anchor": "middle" }, svg).textContent = (showLow ? g.toFixed(0) : g.toFixed(1)) + "%";
+  }
+  rows.forEach((d, i) => {
+    const cy = m.t + rowH * i + rowH / 2;
+    const prev = d.r.slice(0, 4), cur = d.r[4];
+    const lo = Math.min(...prev), hi = Math.max(...prev);
+    const out = cur > hi;
+    el("text", { x: m.l - 10, y: cy + 4, "text-anchor": "end", class: out ? "val" : "lab" }, svg).textContent = d.p;
+    el("rect", { x: x(lo), y: cy - 5, width: Math.max(3, x(hi) - x(lo)), height: 10, rx: 4, fill: "var(--neutral-band)", stroke: "var(--axis)" }, svg);
+    el("circle", { cx: x(cur), cy, r: 6, fill: out ? "var(--critical)" : "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2 }, svg);
+    el("text", { x: x(Math.max(cur, hi)) + 12, y: cy + 4, class: out ? "val" : "lab" }, svg).textContent = cur.toFixed(2) + "%" + (out ? " ▲" : "");
+    const hit = el("rect", { x: 0, y: cy - rowH / 2, width: W, height: rowH, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", (e) => showTip(e,
+      `<b>${d.p}</b><br>This week: <b>${cur.toFixed(2)}%</b> (${d.n})<br>Previous 4 weeks: ${prev.map((v) => v.toFixed(2) + "%").join(", ")}` +
+      (out ? `<br><b style="color:var(--critical)">▲ Above previous range</b>` : "")));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+  $("#plat").innerHTML = ""; $("#plat").appendChild(svg);
+}
+drawPlat();
+$("#lowVolBtn").onclick = (e) => {
+  showLow = !showLow; e.target.setAttribute("aria-pressed", showLow); drawPlat();
+};
+
+/* ---------- dBFS scale ---------- */
+(function drawDb() {
+  const W = 900, H = 170, m = { l: 40, r: 30 };
+  const x = (db) => m.l + (W - m.l - m.r) * ((db + 160) / 160);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "Audio level scale in dBFS" });
+  const axisY = 130;
+  el("line", { x1: x(-160), x2: x(0), y1: axisY, y2: axisY, stroke: "var(--axis)" }, svg);
+  for (let d = -160; d <= 0; d += 20) {
+    el("line", { x1: x(d), x2: x(d), y1: axisY, y2: axisY + 5, stroke: "var(--axis)" }, svg);
+    el("text", { x: x(d), y: axisY + 20, "text-anchor": "middle" }, svg).textContent = d + " dBFS";
+  }
+  const bands = [
+    { a: -152, b: -148, y: 60, c: "var(--text-muted)", lbl: "Hard mute (−150)", tip: "Below −150 dBFS the app treats the mic as muted. Account 273882 stayed above this, so the mic was live." },
+    { a: -82, b: -74, y: 60, c: "var(--critical)", lbl: "273882 average", tip: "Average level −74 to −82 dBFS on 10 of 11 recordings: far too quiet to carry speech." },
+    { a: -72, b: -57, y: 90, c: "var(--warning)", lbl: "273882 peaks", tip: "Peaks only −57 to −72 dBFS. Normal speech peaks are around −20." },
+    { a: -54, b: -46, y: 60, c: "var(--series-1)", lbl: "Healthy visit avg", tip: "For comparison: real visits from account 290580 averaged −46 to −54 dBFS with peaks around −17." },
+    { a: -40, b: -20, y: 90, c: "var(--good)", lbl: "Normal speech", tip: "Normal speech is roughly −20 to −40 dBFS." },
+  ];
+  bands.forEach((bd) => {
+    const g = el("g", {}, svg);
+    el("rect", { x: x(bd.a), y: bd.y, width: Math.max(4, x(bd.b) - x(bd.a)), height: 18, rx: 4, fill: bd.c }, g);
+    el("line", { x1: (x(bd.a) + x(bd.b)) / 2, x2: (x(bd.a) + x(bd.b)) / 2, y1: bd.y + 18, y2: axisY, stroke: bd.c, "stroke-dasharray": "2 3" }, g);
+    el("text", { x: (x(bd.a) + x(bd.b)) / 2, y: bd.y - 6, "text-anchor": "middle", class: "lab" }, g).textContent = bd.lbl;
+    el("rect", { x: x(bd.a) - 20, y: bd.y - 22, width: x(bd.b) - x(bd.a) + 40, height: axisY - bd.y + 22, fill: "transparent" }, g)
+      .addEventListener("mousemove", (e) => showTip(e, `<b>${bd.lbl}</b><br>${bd.tip}`));
+    g.addEventListener("mouseleave", hideTip);
+  });
+  el("text", { x: x(-160), y: 22, class: "lab" }, svg).textContent = "← quieter";
+  el("text", { x: x(0), y: 22, "text-anchor": "end", class: "lab" }, svg).textContent = "louder →";
+  $("#db").appendChild(svg);
+})();
+</script>
+</body>
+</html>

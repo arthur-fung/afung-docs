@@ -1,4 +1,4 @@
-# LLM-20508 — Provider templates, rule-scoped template coverage, unset default: API spec
+# LLM-20508 — Provider templates + rule-scoped template coverage: API spec
 
 Paths are under `/v1/scribe/admin_panel/appointment_rules`.
 
@@ -6,7 +6,6 @@ Paths are under `/v1/scribe/admin_panel/appointment_rules`.
 |---|---|---|---|
 | [normandy#61078](https://github.com/getathelas/normandy/pull/61078) | LLM-20951 | `GET /providers/{provider_id}/templates` (new) | Open, review required |
 | [normandy#61094](https://github.com/getathelas/normandy/pull/61094) | LLM-20962 | `GET /template_coverage` (new params) | Open, review required |
-| Not opened yet | LLM-20970 | `DELETE /{template_id}/default` (new) | Not started (stacked on #61094) |
 
 ## 1. `GET /providers/{provider_id}/templates` (new)
 
@@ -75,49 +74,7 @@ GET /template_coverage?template_id=79&appointment_type=QA+Follow+Up&rule_templat
 
 `404 No appointment rule for that type and template` if the rule doesn't exist.
 
-## 3. `DELETE /{template_id}/default` (new)
-
-Stops a rule being the default (the counterpart of `PUT /{template_id}/default`). Nobody's template changes: the default's providers are pinned to the rule, and the type is left with no default.
-
-### Request
-
-| Param | In | Type | Required |
-|---|---|---|---|
-| `template_id` | path | int | yes |
-| `appointment_type` | query | str, min length 1 | yes |
-
-No body.
-
-### Response `200`
-
-`AppointmentRuleWriteResponse`, the same as `PUT /{template_id}/default`: the refreshed `appointment_type` card (the rule now has `is_default: false` and the same `provider_count`) and the site-wide `missing_rules`.
-
-```
-DELETE /64/default?appointment_type=QA+New+Patient
-```
-```json
-{
-  "appointment_type": {
-    "appointment_type": "QA New Patient",
-    "rules": [
-      {"template_id": 64, "template_name": "Progress Note", "template_deleted": false,
-       "is_default": false, "provider_count": 14, "providers_missing_template_count": 2},
-      {"template_id": 83, "template_name": "SOAP Note", "template_deleted": false,
-       "is_default": false, "provider_count": 2, "providers_missing_template_count": 0}
-    ]
-  },
-  "missing_rules": {"provider_count": 11, "appointment_type_count": 3},
-  "errors": []
-}
-```
-
-| Case | Status | `detail` |
-|---|---|---|
-| No rule for that type and template | 404 | `No appointment rule for that type and template` |
-| Rule is not the default | 400 | `Rule is not the default for this appointment type` |
-| Default covers no active providers | 400 | `Rule has no providers; delete it instead` |
-
-## 4. What to call
+## 3. What to call
 
 | Scenario | Call |
 |---|---|
@@ -127,7 +84,6 @@ DELETE /64/default?appointment_type=QA+New+Patient
 | Delete a non-default rule (the type has a default) | `GET /template_coverage?template_id={default}&appointment_type={type}&rule_template_id={rule}` |
 | Delete the default (other rules exist) | `GET /template_coverage?template_id={new_default_template_id}&appointment_type={type}&rule_template_id={default}` |
 | Delete when there's nowhere to land (no default, or the last rule) | No call; skip the missing-template step |
-| Uncheck "Set as default" on the default | `DELETE /{template_id}/default?appointment_type={type}` (not `PUT`) |
 | Move providers onto a rule | `GET /providers/{provider_id}/templates` for each selected provider; missing = target template not in `templates` |
 
 Call when the action is confirmed, not from data loaded earlier.

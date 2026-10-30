@@ -38,7 +38,7 @@ Both feature flags are off everywhere. Until a PR is merged and deployed, its en
 | Flags | `scribe_appointment_rules` (site level) turns the feature on. It is the only kill switch. `scribe_appointment_rules_provider_view` (account level) only shows the provider card. It does not turn rules on by itself. |
 | Site scope | Taken from the caller's provider. Never sent in the request. |
 | Rule identity | `{appointment_type, template_id}`. Rules have no id. Admin write routes address a rule as `/{template_id}?appointment_type=…`: the template goes in the path, and the type goes in the query string because it is free text and may contain `/`. |
-| `appointment_type` | Free text from the EHR. Matching is exact, so case and inner whitespace count. Send back the exact string you received from a list response. URL-encode it in query strings. Request **bodies** (`POST /appointment_rules`, `PUT /me`) trim leading and trailing whitespace. Query strings don't. |
+| `appointment_type` | Free text from the EHR. Matching is exact, so case and all whitespace count, including leading and trailing spaces (some EHR types have them). Send back the exact string you received from a list response. URL-encode it in query strings. Request **bodies** (`POST /appointment_rules`, `PUT /me`) store it exactly as sent; a blank or whitespace-only value returns `422`. |
 | "Provider" | A provider at the site with an enabled scribe account. In production, accounts with an Athelas email don't count, except on internal sites. Each provider is evaluated against **one** account, the same one the nightly pre-chart sweep uses. `has_template`, missing counts and the primary template are all computed on that account. |
 | "Has the template" | The template is assigned and active on that account, isn't deleted, and is a scribe note template. |
 | Reads | Served from the replica, so they can lag writes by a few seconds. Write responses are read from the primary. Use the write response to refresh the UI, not an immediate re-`GET`. |
@@ -107,7 +107,7 @@ Both feature flags are off everywhere. Until a PR is merged and deployed, its en
 |---|---|---|
 | `provider_id` | int | |
 | `action` | `"ADD_TEMPLATE"` | |
-| `error` | string | Raw reason. Log it; don't show it verbatim. |
+| `error` | string | Always `"Could not add template"`. The underlying reason is only in server logs. |
 
 ---
 
@@ -156,6 +156,7 @@ All of these are `403` when `scribe_appointment_rules` is off for the site.
 | `template_id` | int ≥ 1 | yes | With `appointment_type`: the rule. Without: the template `has_template` is checked against |
 | `facility_id` | int | no | |
 | `search` | string | no | Case-insensitive substring match on the name or email, trimmed |
+| `has_template` | bool | no | `true`: only providers who have `template_id`. `false`: only those who don't. Omit for everyone. Applied before paging, so `total_count` and `total_pages` match. The side panel sends `true` so the list matches the card count (`provider_count - providers_missing_template_count`). |
 | `page` | int ≥ 1 | no | Default `1` |
 | `items_per_page` | int, 1–100 | no | If omitted, page 1 has 5 rows and later pages have 20, so page *n* ≥ 2 starts at offset `5 + (n − 2) × 20`. If set, every page has that many rows. |
 
@@ -170,7 +171,7 @@ Sorted by name (case-insensitive), then `provider_id`. All rows have the same `i
 | `providers` | `RuleProvider[]` | |
 | `page` | int | |
 | `items_per_page` | int | The page size actually used for this page (5 or 20 when you didn't send one) |
-| `total_count` | int | After `search` and `facility_id` |
+| `total_count` | int | After `search`, `facility_id` and `has_template` |
 | `total_pages` | int | `0` when `total_count` is `0` |
 
 ```json
@@ -269,6 +270,7 @@ The client intersects `providers_without_template` with its own selection to ren
 The FE chooses which options to show for each group, using `GET /appointment_rules`. The backend doesn't enforce this.
 - **The type has a default rule:** show "Add template to account" (`ADD_TEMPLATE`) and "Create personal rule" (`PERSONAL_RULES`).
 - **The type has no default rule:** show only "Create personal rule". Acting is optional: the admin can close the pop-up, add a default, and come back.
+- **The group's template has been deleted** (`template_deleted` on the rule in `GET /appointment_rules`): show only "Create personal rule". `ADD_TEMPLATE` onto a deleted template returns `400` (§4).
 
 ### 3.5 Reused endpoints (unchanged)
 
@@ -304,11 +306,14 @@ Accepted by create, edit, move providers and delete. Set default doesn't take a 
   - the provider isn't in scope
   - the provider already has the landing template
   - `PERSONAL_RULES` has no template to use (see below)
+  - an entry is `ADD_TEMPLATE` and the landing template has been deleted: `"Template has been deleted"`. Adding a deleted template never makes the provider stop missing it. Use `PERSONAL_RULES` instead.
 
 | Action | Effect |
 |---|---|
-| `ADD_TEMPLATE` | The provider stays on the landing rule. **After** the rule write commits, the landing template is added to every enabled scribe account the provider has at the site. If the template is already active on an account, that account isn't changed. Otherwise the template is added or reactivated so it never becomes the account's primary template. If the account has numbered priorities, it gets the highest number plus one. If none are numbered, it is added without a priority; when its id is lower than the current primary's, the current primary is given priority `1` so it stays first. If this fails, the provider is still on the rule (and still missing), and the failure appears in `errors`. Some of the provider's accounts may already have been updated. To retry, resolve the provider from the missing pop-up. |
+| `ADD_TEMPLATE` | The provider stays on the landing rule. **After** the rule write commits, the landing template is added to every enabled scribe account the provider has at the site. If the template is already active on an account, that account is skipped and isn't changed. Otherwise the template is added or reactivated so it never becomes the account's primary template. If the account has numbered priorities, it gets the highest number plus one. If none are numbered, it is added without a priority; when its id is lower than the current primary's, the current primary is given priority `1` so it stays first. If this fails, the provider is still on the rule (and still missing), and the failure appears in `errors`. Some of the provider's accounts may already have been updated. To retry, resolve the provider from the missing pop-up. The request posts one `#scribe-alerts` summary (production only) of the accounts it changed, not one message per account; it names the first 20 and counts the rest, to stay under Slack's 3,000-character limit. |
 | `PERSONAL_RULES` | The provider is pinned to a rule with a template they have, instead of the landing template. This is applied in the same transaction as the rule write, as its last step. |
+
+The write's admin action log entry records each `providers_without_template` entry (`provider_id`, `action`) and the providers whose `ADD_TEMPLATE` failed.
 
 **Which template `PERSONAL_RULES` uses:**
 1. The provider's current non-default rule for the type, unless it's the rule this write is moving them off: the rule being edited or deleted, or the landing rule.
@@ -338,7 +343,7 @@ Every write returns a `WriteResponse` (§2). Every route except create addresses
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `appointment_type` | string | yes | Trimmed. Must not be blank. |
+| `appointment_type` | string | yes | Stored exactly as sent, not trimmed. Must not be blank or whitespace-only. |
 | `template_id` | int ≥ 1 | yes | At least one provider at the site must have it |
 | `is_default` | bool | yes | |
 | `apply_to` | `"ALL"` \| `"SELECTED"` | yes | |
@@ -457,6 +462,7 @@ Moving providers to the default removes their pins. A rule that loses its last p
 | Status | When |
 |---|---|
 | `400` | Some `provider_ids` aren't site providers, or a `providers_without_template` entry fails validation |
+| `400` | `PERSONAL_RULES` would leave a provider on the rule they're already on (their primary template). Use `ADD_TEMPLATE`, or leave them out. |
 | `404` | There's no such rule |
 | `422` | `provider_ids` is empty, or `provider_ids` or `providers_without_template` has more than 1000 items |
 
@@ -567,8 +573,8 @@ The card lists the provider's most frequent appointment types, each with a templ
 |---|---|---|---|
 | `scope` | `"top"` \| `"all"` | no | Default `top`. Any other value returns `422`. |
 
-- **`top`**: the caller's 7 most frequent appointment types, counted from appointments where they are the rendering provider at the site in the last 180 days. Cancelled, no-show, archived and deleted visits don't count. Sorted by count, highest first, then by name. Only types the caller has actually seen are included, so a new provider gets `items: []`.
-- **`all`**: every type the caller has seen, every type seen at the site in the last 180 days, and every type that has a rule. Sorted by the caller's count, highest first, then types the caller hasn't seen, alphabetically. Capped at 500. There's **no server-side search or paging**; the client filters the list.
+- **`top`**: the caller's 7 most frequent appointment types, counted from appointments where they are the rendering provider at the site from 180 days ago to 14 days ahead. Appointments booked further out don't count, so recurring bookings months ahead can't crowd out the types they actually see. Cancelled, no-show, archived and deleted visits don't count. Sorted by count, highest first, then by name. Only types the caller has in that window are included, so a new provider with no visits gets `items: []`.
+- **`all`**: every type the caller has in the same window, every type seen at the site in the last 180 days, and every type that has a rule. Sorted by the caller's count, highest first, then types the caller hasn't seen, alphabetically. Capped at 500. There's **no server-side search or paging**; the client filters the list.
 
 Render the rows in the order they arrive.
 
@@ -590,7 +596,7 @@ Render the rows in the order they arrive.
 
 | Body field | Type | Required | Notes |
 |---|---|---|---|
-| `appointment_type` | string | yes | Trimmed. Must not be blank. Sent in the body, so it needs no URL-encoding. |
+| `appointment_type` | string | yes | Stored exactly as sent, not trimmed. Must not be blank or whitespace-only. Sent in the body, so it needs no URL-encoding. |
 | `template_id` | int | yes | Must be active on the caller's own account, not deleted, and a scribe template |
 
 ```json
@@ -639,19 +645,19 @@ Sending the same pair twice gives the same result, so retrying is safe.
 | `PERSONAL_RULES` target (OQ3) | Primary template; which account wins was pending | The provider's existing non-default rule wins first, then the primary template on the provider's one account |
 | `PERSONAL_RULES` → default (OQ2) | Pending | Confirmed: the provider falls to the default |
 | No landing template | Not covered | `providers_without_template` is ignored |
-| New `400`s | — | Create, edit `new_template_id` or set default on a deleted template; edit `provider_ids` with a `new_template_id` that is the default's template; delete with `PERSONAL_RULES` pointing back at the deleted rule; site can't be resolved |
+| New `400`s | — | Create, edit `new_template_id` or set default on a deleted template; edit `provider_ids` with a `new_template_id` that is the default's template; move or delete with `PERSONAL_RULES` pointing back at the rule the provider is already on; site can't be resolved |
 | "Template isn't active at the site" `400` | All writes | Only on create, and on edit with `new_template_id` |
 | `template_coverage` | No error listed | `404` for an unknown, deleted or non-scribe template |
 | `/providers` paging | — | `items_per_page` is capped at 100, and the response echoes the page size actually used |
 | `409` / `500` | `409` only for a duplicate create | Also `409` for concurrent-write conflicts, and a `500` that means the write succeeded but the response couldn't be built |
-| `appointment_type` | Matched byte-for-byte | The same, but request **bodies** trim leading and trailing whitespace |
+| `appointment_type` | Matched byte-for-byte | The same. Request bodies are no longer trimmed (2026-10-27): trimming created rules that never matched EHR types with edge spaces |
 | List ordering | Not specified | Mapped types alphabetical, then unmapped types (180-day window) alphabetical. The missing groups are ordered too (§3.4). |
 | `template_name` | string | `""` when the template has no name |
 | Flags | Rules were read when either flag was on (provider spec §6.2) | Only `scribe_appointment_rules` turns rules on. The provider-view flag only gates `/me`. |
 | §7.1 flag off | "Default rule only" | Old v0 behavior (default rows, ranked by the viewer) |
 | Drafts on rule change (OQ5) | Pending | Left as they are |
 | Provider `GET /me` item | "Their pick, else the default" | A pick or default the caller can't use shows `null` |
-| Provider frequency (§6.1) | Pending | Top 7 over 180 days, excluding cancelled, no-show, archived and deleted |
+| Provider frequency (§6.1) | Pending | Top 7 over the last 180 days and next 14 days, excluding cancelled, no-show, archived and deleted |
 | Reused endpoint paths | Some had no `/v1` | Full `/v1/scribe/...` paths |
 | Empty default (OQ1) | Kept with 0 providers; still covers future providers | Deleted once everyone is pinned elsewhere. Kept only if the type has no other rule. |
 | Admin `ALL` + default | Warning to be decided | No warning |

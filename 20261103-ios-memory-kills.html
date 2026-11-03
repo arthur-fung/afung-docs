@@ -1,14 +1,15 @@
 ---
-title: "iOS memory kills: invisible to Crashlytics, no alerts (2026-11-03)"
+title: "One provider losing the end of every visit: iOS memory kills, account 314787 (2026-11-03)"
 layout: null
 ---
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>iOS memory kills: what we have</title>
+<title>One provider losing the end of every visit: iOS memory kills (account 314787)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+  a { color: var(--series-1); }
   .viz-root {
     color-scheme: light;
     --surface-0: #ffffff; --surface-1: #fcfcfb; --card: #f5f5f3; --line: #dddcd7;
@@ -71,14 +72,25 @@ layout: null
 </head>
 <body class="viz-root">
 <div class="wrap">
-  <h1>iOS memory kills: what we have</h1>
-  <p class="sub">Week of 10/26–11/1 (plus 11/2–11/3 for one account). Sources: Sentry, Crashlytics (BigQuery export), our app events (scribe_events), Postgres. No patient data.</p>
+  <h1>One provider losing the end of every visit: iOS memory kills</h1>
+  <p class="sub">Account <b>314787</b> · iOS app 3.42.1 · iOS 26.6.2 · iPhone 16 Pro Max · site 153357. Support thread 11/3: "recordings pause 4–8 minutes in on nearly every visit; have to reopen the app." Data 10/27–11/3. No patient data.</p>
 
   <div class="grid4">
-    <div class="card tile"><div class="num">1,045</div><div class="lbl">iOS memory kills last week (Sentry)</div></div>
-    <div class="card tile"><div class="num">78</div><div class="lbl">iOS crashes Crashlytics counted the same week</div></div>
-    <div class="card tile"><div class="num">0</div><div class="lbl">memory kills in the iOS crash-free rate (99.95%)</div></div>
-    <div class="card tile"><div class="num">0</div><div class="lbl">alerts we found on it (Slack, Grafana)</div></div>
+    <div class="card tile"><div class="num">20</div><div class="lbl">app kills in 3 days, from our own app events (10/30, 11/2, 11/3)</div></div>
+    <div class="card tile"><div class="num">14</div><div class="lbl">watchdog kills Sentry recorded for this account (<a href="https://athelas-monitoring.sentry.io/issues/5358319754/events/?environment=PRODUCTION&query=user.id%3A314787">view in Sentry</a>)</div></div>
+    <div class="card tile"><div class="num">0</div><div class="lbl">crashes Crashlytics recorded for this account</div></div>
+    <div class="card tile"><div class="num">9.1 → 3.6</div><div class="lbl">median recording minutes, 10/28 → 11/2</div></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <b>Evidence links</b>
+    <ul class="tight">
+      <li><b>Sentry, this account's watchdog kills:</b> <a href="https://athelas-monitoring.sentry.io/issues/5358319754/events/?environment=PRODUCTION&query=user.id%3A314787">SCRIBE-MOBILE-B0 filtered to user.id:314787</a> (WatchdogTermination, "possibly because it overused RAM")</li>
+      <li><b>Sentry, low-memory warnings before each kill:</b> <a href="https://athelas-monitoring.sentry.io/issues/?query=SCRIBE-MOBILE-QD6">SCRIBE-MOBILE-QD6</a> (filter by user.id:314787)</li>
+      <li><b>Sentry, the same issue across all iOS users:</b> <a href="https://athelas-monitoring.sentry.io/issues/5358319754/">SCRIBE-MOBILE-B0</a> (open since 6/17)</li>
+      <li><b>Fix ticket:</b> <a href="https://linear.app/commure/issue/AFEP-2644/ios-foreground-recording-jetsam-due-to-native-pcm-memory-growth-scribe">AFEP-2644</a> (marked Done 9/14; kills continue)</li>
+      <li><b>App events:</b> Retool, scribe_events for scribe_account_id 314787 (<code>APP_KILLED_DETECTED</code>, <code>IOS_LOW_MEMORY_WARNING</code>)</li>
+    </ul>
   </div>
 
   <h2>What happens</h2>
@@ -95,46 +107,10 @@ layout: null
     <div class="step"><b>5. Note</b>Some audio is lost; the note covers only the first few minutes.</div>
   </div>
 
-  <h2>Which tools see it</h2>
-  <div class="card">
-    <table>
-      <tr><th>Source</th><th>Sees memory kills?</th><th>What it shows</th><th>Alerting</th></tr>
-      <tr><td><b>Our app events</b> (scribe_events)</td><td><span class="pill p-good">✓ Yes, best</span></td>
-        <td><code>APP_KILLED_DETECTED</code>, <code>IOS_LOW_MEMORY_WARNING</code>, recovered audio, invalid audio parts. Caught 20 kills for the case account vs Sentry's 14.</td>
-        <td><span class="pill p-crit">✗ None</span></td></tr>
-      <tr><td><b>Sentry</b></td><td><span class="pill p-good">✓ Yes, inferred</span></td>
-        <td>Fatal <code>WatchdogTermination</code> (issue SCRIBE-MOBILE-B0), filed on the next launch. Can miss kills (e.g. app in background).</td>
-        <td><span class="pill p-crit">✗ None</span> issue open since 6/17, never re-alerts</td></tr>
-      <tr><td><b>Our crash pipeline</b> (BigQuery → Grafana)</td><td><span class="pill p-warn">◐ Yes, mislabeled</span></td>
-        <td>Ingests SCRIBE-MOBILE-B0 daily, but labels it "error" instead of fatal.</td>
-        <td><span class="pill p-crit">✗ None</span></td></tr>
-      <tr><td><b>Crashlytics</b></td><td><span class="pill p-crit">✗ No</span></td>
-        <td>Records nothing for memory kills. The crash-free rate in our report comes from here.</td>
-        <td>—</td></tr>
-    </table>
-  </div>
-
-  <h2>How big it is: every iOS user</h2>
+  <h2>What happened to this provider</h2>
   <div class="grid2">
     <div class="card">
-      <b>Memory kills per day</b>
-      <p class="sub" style="margin:2px 0 6px">Sentry WatchdogTermination, all iOS users, 10/12–11/2 (ET days)</p>
-      <div class="chart" id="c-daily"></div>
-      <details><summary>Show as table</summary><div id="t-daily"></div></details>
-    </div>
-    <div class="card">
-      <b>Memory kills vs counted crashes, per week</b>
-      <div class="legend"><span><span class="sw" style="background:var(--series-1)"></span>Memory kills (Sentry)</span><span><span class="sw" style="background:var(--series-2)"></span>Crashes (Crashlytics)</span></div>
-      <div class="chart" id="c-weekly"></div>
-      <details><summary>Show as table</summary><div id="t-weekly"></div></details>
-    </div>
-  </div>
-
-  <h2>One provider: account 314787</h2>
-  <p class="sub">iOS 3.42.1 · iOS 26.6.2 · iPhone 16 Pro Max. Support thread 11/3: "recordings pause 4–8 minutes in on nearly every visit; have to reopen the app."</p>
-  <div class="grid2">
-    <div class="card">
-      <b>Kills per day, two sources</b>
+      <b>Kills per day: our app events vs <a href="https://athelas-monitoring.sentry.io/issues/5358319754/events/?environment=PRODUCTION&query=user.id%3A314787">Sentry</a></b>
       <div class="legend"><span><span class="sw" style="background:var(--series-1)"></span>App "app killed" events</span><span><span class="sw" style="background:var(--series-2)"></span>Sentry WatchdogTermination</span></div>
       <div class="chart" id="c-case"></div>
       <details><summary>Show as table</summary><div id="t-case"></div></details>
@@ -157,6 +133,42 @@ layout: null
     </ul>
   </div>
 
+  <h2>Which tools see it</h2>
+  <div class="card">
+    <table>
+      <tr><th>Source</th><th>Sees memory kills?</th><th>What it shows</th><th>Alerting</th></tr>
+      <tr><td><b>Our app events</b> (scribe_events)</td><td><span class="pill p-good">✓ Yes, best</span></td>
+        <td><code>APP_KILLED_DETECTED</code>, <code>IOS_LOW_MEMORY_WARNING</code>, recovered audio, invalid audio parts. Caught 20 kills for account 314787 vs Sentry's 14.</td>
+        <td><span class="pill p-crit">✗ None</span></td></tr>
+      <tr><td><b>Sentry</b></td><td><span class="pill p-good">✓ Yes, inferred</span></td>
+        <td>Fatal <code>WatchdogTermination</code> (issue SCRIBE-MOBILE-B0), filed on the next launch. Can miss kills (e.g. app in background).</td>
+        <td><span class="pill p-crit">✗ None</span> issue open since 6/17, never re-alerts</td></tr>
+      <tr><td><b>Our crash pipeline</b> (BigQuery → Grafana)</td><td><span class="pill p-warn">◐ Yes, mislabeled</span></td>
+        <td>Ingests SCRIBE-MOBILE-B0 daily, but labels it "error" instead of fatal.</td>
+        <td><span class="pill p-crit">✗ None</span></td></tr>
+      <tr><td><b>Crashlytics</b></td><td><span class="pill p-crit">✗ No</span></td>
+        <td>Records nothing for memory kills. The crash-free rate in our report comes from here.</td>
+        <td>—</td></tr>
+    </table>
+  </div>
+
+  <h2>It's not just this provider: every iOS user</h2>
+  <p class="sub">The same Sentry issue (<a href="https://athelas-monitoring.sentry.io/issues/5358319754/">SCRIBE-MOBILE-B0</a>) fires about 1,000 times a week across all iOS users, more than 10× what Crashlytics counts as crashes. None of it is in the 99.95% crash-free rate, and nothing alerts on it.</p>
+  <div class="grid2">
+    <div class="card">
+      <b>Memory kills per day, all iOS users</b>
+      <p class="sub" style="margin:2px 0 6px">Sentry WatchdogTermination, all iOS users, 10/12–11/2 (ET days)</p>
+      <div class="chart" id="c-daily"></div>
+      <details><summary>Show as table</summary><div id="t-daily"></div></details>
+    </div>
+    <div class="card">
+      <b>Memory kills vs counted crashes, per week</b>
+      <div class="legend"><span><span class="sw" style="background:var(--series-1)"></span>Memory kills (Sentry)</span><span><span class="sw" style="background:var(--series-2)"></span>Crashes (Crashlytics)</span></div>
+      <div class="chart" id="c-weekly"></div>
+      <details><summary>Show as table</summary><div id="t-weekly"></div></details>
+    </div>
+  </div>
+
   <h2>Gaps and next steps</h2>
   <div class="grid2">
     <div class="card">
@@ -171,7 +183,7 @@ layout: null
     <div class="card">
       <b>Next steps</b>
       <ol style="margin:6px 0 0;padding-left:18px">
-        <li>Reopen AFEP-2644 (or follow-up) with the weekly volume and this case.</li>
+        <li>Reopen AFEP-2644 (or follow-up) with this provider's case and the weekly volume.</li>
         <li>Alert on kill volume: Sentry metric alert on SCRIBE-MOBILE-B0, and/or a spike in <code>APP_KILLED_DETECTED</code> per account.</li>
         <li>Report memory kills next to Crashlytics every week (now in the report skill).</li>
         <li>Funnel logging: record why the app ended (iOS exit reason) so kills are a named outcome.</li>

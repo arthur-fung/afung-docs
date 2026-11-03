@@ -1,0 +1,289 @@
+---
+title: "iOS memory kills: invisible to Crashlytics, no alerts (2026-11-03)"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS memory kills: what we have</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-0: #ffffff; --surface-1: #fcfcfb; --card: #f5f5f3; --line: #dddcd7;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --series-1: #2a78d6; --series-2: #eb6834;
+    --good: #1f7a4d; --good-bg: #e3f3ea; --crit: #b3261e; --crit-bg: #fbe7e5; --warn: #8a5a00; --warn-bg: #fdf0d5;
+    --grid: #ecebe7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-0: #121211; --surface-1: #1a1a19; --card: #222220; --line: #3a3936;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+      --series-1: #3987e5; --series-2: #d95926;
+      --good: #6fd3a0; --good-bg: #163526; --crit: #ff8f86; --crit-bg: #3a1c1a; --warn: #f1c46a; --warn-bg: #3a2e12;
+      --grid: #2c2b29;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .viz-root { background: var(--surface-0); color: var(--text-primary);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100vh; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 40px 0 6px; }
+  .sub { color: var(--text-secondary); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .grid4 { grid-template-columns: 1fr 1fr; } .grid2 { grid-template-columns: 1fr; } }
+  .tile .num { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
+  .tile .lbl { color: var(--text-secondary); font-size: 13px; }
+  .flow { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+  .step { flex: 1 1 150px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .step b { display: block; margin-bottom: 2px; }
+  .arrow { align-self: center; color: var(--text-muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .p-good { background: var(--good-bg); color: var(--good); }
+  .p-crit { background: var(--crit-bg); color: var(--crit); }
+  .p-warn { background: var(--warn-bg); color: var(--warn); }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .axis text { fill: var(--text-muted); font-size: 11px; }
+  .gridline { stroke: var(--grid); }
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary); margin: 4px 0 8px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 9px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.12); display: none; white-space: nowrap; z-index: 2; }
+  details { margin-top: 8px; font-size: 13px; color: var(--text-secondary); }
+  summary { cursor: pointer; }
+  ul.tight { margin: 6px 0 0; padding-left: 18px; }
+  ul.tight li { margin: 3px 0; }
+  code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-1); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); }
+  footer { margin-top: 40px; color: var(--text-muted); font-size: 13px; }
+</style>
+</head>
+<body class="viz-root">
+<div class="wrap">
+  <h1>iOS memory kills: what we have</h1>
+  <p class="sub">Week of 10/26–11/1 (plus 11/2–11/3 for one account). Sources: Sentry, Crashlytics (BigQuery export), our app events (scribe_events), Postgres. No patient data.</p>
+
+  <div class="grid4">
+    <div class="card tile"><div class="num">1,045</div><div class="lbl">iOS memory kills last week (Sentry)</div></div>
+    <div class="card tile"><div class="num">78</div><div class="lbl">iOS crashes Crashlytics counted the same week</div></div>
+    <div class="card tile"><div class="num">0</div><div class="lbl">memory kills in the iOS crash-free rate (99.95%)</div></div>
+    <div class="card tile"><div class="num">0</div><div class="lbl">alerts we found on it (Slack, Grafana)</div></div>
+  </div>
+
+  <h2>What happens</h2>
+  <p class="sub">Why a recording "pauses on its own" a few minutes in, and why the provider has to reopen the app.</p>
+  <div class="flow">
+    <div class="step"><b>1. Recording</b>Memory used by the app's audio path keeps growing (AFEP-2644: ~306 MB → 2.5 GB in ~5 min).</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>2. Warning</b>iOS sends a low-memory warning. The app logs it (<code>IOS_LOW_MEMORY_WARNING</code>) but doesn't act on it.</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>3. Kill</b>~2 min later iOS ends the app. No crash report is possible.</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>4. Reopen</b>Provider reopens the app. It restores the recording as <em>paused</em> and logs <code>APP_KILLED_DETECTED</code>; Sentry files a <code>WatchdogTermination</code>.</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>5. Note</b>Some audio is lost; the note covers only the first few minutes.</div>
+  </div>
+
+  <h2>Which tools see it</h2>
+  <div class="card">
+    <table>
+      <tr><th>Source</th><th>Sees memory kills?</th><th>What it shows</th><th>Alerting</th></tr>
+      <tr><td><b>Our app events</b> (scribe_events)</td><td><span class="pill p-good">✓ Yes, best</span></td>
+        <td><code>APP_KILLED_DETECTED</code>, <code>IOS_LOW_MEMORY_WARNING</code>, recovered audio, invalid audio parts. Caught 20 kills for the case account vs Sentry's 14.</td>
+        <td><span class="pill p-crit">✗ None</span></td></tr>
+      <tr><td><b>Sentry</b></td><td><span class="pill p-good">✓ Yes, inferred</span></td>
+        <td>Fatal <code>WatchdogTermination</code> (issue SCRIBE-MOBILE-B0), filed on the next launch. Can miss kills (e.g. app in background).</td>
+        <td><span class="pill p-crit">✗ None</span> issue open since 6/17, never re-alerts</td></tr>
+      <tr><td><b>Our crash pipeline</b> (BigQuery → Grafana)</td><td><span class="pill p-warn">◐ Yes, mislabeled</span></td>
+        <td>Ingests SCRIBE-MOBILE-B0 daily, but labels it "error" instead of fatal.</td>
+        <td><span class="pill p-crit">✗ None</span></td></tr>
+      <tr><td><b>Crashlytics</b></td><td><span class="pill p-crit">✗ No</span></td>
+        <td>Records nothing for memory kills. The crash-free rate in our report comes from here.</td>
+        <td>—</td></tr>
+    </table>
+  </div>
+
+  <h2>How big it is: every iOS user</h2>
+  <div class="grid2">
+    <div class="card">
+      <b>Memory kills per day</b>
+      <p class="sub" style="margin:2px 0 6px">Sentry WatchdogTermination, all iOS users, 10/12–11/2 (ET days)</p>
+      <div class="chart" id="c-daily"></div>
+      <details><summary>Show as table</summary><div id="t-daily"></div></details>
+    </div>
+    <div class="card">
+      <b>Memory kills vs counted crashes, per week</b>
+      <div class="legend"><span><span class="sw" style="background:var(--series-1)"></span>Memory kills (Sentry)</span><span><span class="sw" style="background:var(--series-2)"></span>Crashes (Crashlytics)</span></div>
+      <div class="chart" id="c-weekly"></div>
+      <details><summary>Show as table</summary><div id="t-weekly"></div></details>
+    </div>
+  </div>
+
+  <h2>One provider: account 314787</h2>
+  <p class="sub">iOS 3.42.1 · iOS 26.6.2 · iPhone 16 Pro Max. Support thread 11/3: "recordings pause 4–8 minutes in on nearly every visit; have to reopen the app."</p>
+  <div class="grid2">
+    <div class="card">
+      <b>Kills per day, two sources</b>
+      <div class="legend"><span><span class="sw" style="background:var(--series-1)"></span>App "app killed" events</span><span><span class="sw" style="background:var(--series-2)"></span>Sentry WatchdogTermination</span></div>
+      <div class="chart" id="c-case"></div>
+      <details><summary>Show as table</summary><div id="t-case"></div></details>
+    </div>
+    <div class="card">
+      <b>Median recording length per day</b>
+      <p class="sub" style="margin:2px 0 6px">Server audio length of this account's scribes (minutes)</p>
+      <div class="chart" id="c-len"></div>
+      <details><summary>Show as table</summary><div id="t-len"></div></details>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <ul class="tight">
+      <li><b>Started 10/30.</b> Before that: no low-memory warnings, almost no kills. 11/2: 11 kills for 10 recordings.</li>
+      <li><b>Each Sentry kill came ~2 min after a low-memory warning</b> (8 / 11 / 6 warnings on 10/30, 11/2, 11/3).</li>
+      <li><b>Nothing changed on 10/30</b> in app version, recording mode (non-chunking) or iOS version, so something growing inside the app is the likely trigger.</li>
+      <li><b>Crashlytics: no crashes</b> for this account; one non-fatal network timeout.</li>
+      <li><b>Not counted as lost scribes:</b> an "app killed" event marks a recording as not lost, so these show up as paused / stuck in cache.</li>
+      <li><b>Could have been caught on 10/30</b>, three days before the support ticket, from the app's own events.</li>
+    </ul>
+  </div>
+
+  <h2>Gaps and next steps</h2>
+  <div class="grid2">
+    <div class="card">
+      <b>Gaps</b>
+      <ul class="tight">
+        <li>The crash-free rate leaves out ~1,000 kills a week.</li>
+        <li>No alert anywhere: Sentry issue is "old", pipeline has no rule, app events aren't alerted on.</li>
+        <li>Fix ticket <b>AFEP-2644</b> is marked Done (9/14) but kills continue on 3.42.1.</li>
+        <li>Killed recordings hide in "paused / stuck", not "lost".</li>
+      </ul>
+    </div>
+    <div class="card">
+      <b>Next steps</b>
+      <ol style="margin:6px 0 0;padding-left:18px">
+        <li>Reopen AFEP-2644 (or follow-up) with the weekly volume and this case.</li>
+        <li>Alert on kill volume: Sentry metric alert on SCRIBE-MOBILE-B0, and/or a spike in <code>APP_KILLED_DETECTED</code> per account.</li>
+        <li>Report memory kills next to Crashlytics every week (now in the report skill).</li>
+        <li>Funnel logging: record why the app ended (iOS exit reason) so kills are a named outcome.</li>
+      </ol>
+    </div>
+  </div>
+
+  <footer>Generated 11/3. Details: Notion report "Ambient Frontend Reliability 10/26-11/1", Appendix G; <code>docs/20261103-account-314787-crash-check.md</code>.</footer>
+</div>
+
+<script>
+const css = n => getComputedStyle(document.body).getPropertyValue(n).trim();
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; }
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / p) * p; }
+function table(id, head, rows) {
+  document.getElementById(id).innerHTML = '<table><tr>' + head.map((h, i) => `<th class="${i ? 'num' : ''}">${h}</th>`).join('') + '</tr>' +
+    rows.map(r => '<tr>' + r.map((c, i) => `<td class="${i ? 'num' : ''}">${c ?? '—'}</td>`).join('') + '</tr>').join('') + '</table>';
+}
+function tipper(box) { const t = document.createElement('div'); t.className = 'tip'; box.appendChild(t); return t; }
+function place(tip, box, x, y) { const w = box.clientWidth; tip.style.display = 'block'; const tw = tip.offsetWidth;
+  tip.style.left = Math.min(Math.max(x - tw / 2, 0), w - tw) + 'px'; tip.style.top = (y - 44) + 'px'; }
+
+// ---- grouped / single bar chart ----
+function bars(id, cats, series, opts = {}) {
+  const box = document.getElementById(id); box.innerHTML = '';
+  const W = 480, H = 220, m = { l: 36, r: 8, t: 14, b: 26 };
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.label || '' }, box);
+  const max = niceMax(Math.max(...series.flatMap(s => s.values.filter(v => v != null))) || 1);
+  const y = v => m.t + (H - m.t - m.b) * (1 - v / max);
+  const g = el('g', { class: 'axis' }, svg);
+  for (let i = 0; i <= 4; i++) { const v = max * i / 4; el('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), class: 'gridline' }, g);
+    el('text', { x: m.l - 6, y: y(v) + 4, 'text-anchor': 'end' }, g).textContent = Math.round(v).toLocaleString(); }
+  const band = (W - m.l - m.r) / cats.length, gap = 2, n = series.length;
+  const bw = Math.min(28, (band * 0.7 - gap * (n - 1)) / n);
+  const tip = tipper(box);
+  cats.forEach((c, i) => {
+    const x0 = m.l + band * i + (band - (bw * n + gap * (n - 1))) / 2;
+    el('text', { x: m.l + band * i + band / 2, y: H - 8, 'text-anchor': 'middle' }, g).textContent = c;
+    series.forEach((s, j) => {
+      const v = s.values[i]; if (v == null) return;
+      const h = Math.max(H - m.b - y(v), v > 0 ? 1 : 0), x = x0 + j * (bw + gap), r = Math.min(4, bw / 2, h);
+      const yTop = H - m.b - h;
+      el('path', { d: `M${x},${H - m.b} V${yTop + r} Q${x},${yTop} ${x + r},${yTop} H${x + bw - r} Q${x + bw},${yTop} ${x + bw},${yTop + r} V${H - m.b} Z`, fill: s.color }, svg);
+      if (opts.labels) { const t = el('text', { x: x + bw / 2, y: yTop - 4, 'text-anchor': 'middle', 'font-size': 11, fill: css('--text-secondary') }, svg); t.textContent = v.toLocaleString(); }
+    });
+    const hit = el('rect', { x: m.l + band * i, y: m.t, width: band, height: H - m.t - m.b, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', () => {
+      tip.innerHTML = `<b>${c}</b><br>` + series.map(s => `<span class="sw" style="background:${s.color}"></span>${s.name}: ${s.values[i] == null ? '—' : s.values[i].toLocaleString()}`).join('<br>');
+      const rect = box.getBoundingClientRect(), sv = svg.getBoundingClientRect();
+      place(tip, box, (m.l + band * i + band / 2) / W * sv.width, (m.t) / H * sv.height + 30);
+    });
+    hit.addEventListener('mouseleave', () => tip.style.display = 'none');
+  });
+}
+
+// ---- single-series line with crosshair ----
+function line(id, cats, values, color, opts = {}) {
+  const box = document.getElementById(id); box.innerHTML = '';
+  const W = 480, H = 220, m = { l: 36, r: 8, t: 14, b: 26 };
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.label || '' }, box);
+  const max = opts.max || niceMax(Math.max(...values.filter(v => v != null)));
+  const x = i => m.l + (W - m.l - m.r) * (cats.length === 1 ? 0.5 : i / (cats.length - 1));
+  const y = v => m.t + (H - m.t - m.b) * (1 - v / max);
+  const g = el('g', { class: 'axis' }, svg);
+  for (let i = 0; i <= 4; i++) { const v = max * i / 4; el('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), class: 'gridline' }, g);
+    el('text', { x: m.l - 6, y: y(v) + 4, 'text-anchor': 'end' }, g).textContent = (opts.axisFmt || (v => Math.round(v)))(v); }
+  const every = opts.every || 1;
+  cats.forEach((c, i) => { if (i % every === 0 || i === cats.length - 1) el('text', { x: x(i), y: H - 8, 'text-anchor': 'middle' }, g).textContent = c; });
+  const pts = values.map((v, i) => v == null ? null : [x(i), y(v)]);
+  let d = ''; pts.forEach((p, i) => { if (!p) return; d += (d && pts[i - 1] ? 'L' : 'M') + p[0] + ',' + p[1]; });
+  el('path', { d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+  pts.forEach(p => p && el('circle', { cx: p[0], cy: p[1], r: 3.5, fill: color, stroke: css('--card'), 'stroke-width': 2 }, svg));
+  (opts.marks || []).forEach(i => { const t = el('text', { x: pts[i][0], y: pts[i][1] - 9, 'text-anchor': 'middle', 'font-size': 11, fill: css('--text-secondary') }, svg); t.textContent = (opts.fmt || String)(values[i]); });
+  const cross = el('line', { y1: m.t, y2: H - m.b, stroke: css('--text-muted'), 'stroke-dasharray': '3 3', visibility: 'hidden' }, svg);
+  const tip = tipper(box);
+  el('rect', { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: 'transparent' }, svg)
+    .addEventListener('mousemove', ev => {
+      const sv = svg.getBoundingClientRect(), px = (ev.clientX - sv.left) / sv.width * W;
+      let i = Math.round((px - m.l) / ((W - m.l - m.r) / (cats.length - 1))); i = Math.max(0, Math.min(cats.length - 1, i));
+      if (values[i] == null) return;
+      cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+      tip.innerHTML = `<b>${cats[i]}</b><br>${opts.name}: ${(opts.fmt || (v => v.toLocaleString()))(values[i])}`;
+      place(tip, box, x(i) / W * sv.width, y(values[i]) / H * sv.height);
+    });
+  svg.lastChild.addEventListener('mouseleave', () => { tip.style.display = 'none'; cross.setAttribute('visibility', 'hidden'); });
+}
+
+const days = ['10/12','10/13','10/14','10/15','10/16','10/17','10/18','10/19','10/20','10/21','10/22','10/23','10/24','10/25','10/26','10/27','10/28','10/29','10/30','10/31','11/1','11/2'];
+const kills = [171,158,179,116,117,45,66,215,187,147,193,136,72,81,213,173,175,221,121,45,97,191];
+const caseDays = ['10/27','10/28','10/29','10/30','11/2','11/3'];
+const appKills = [0,1,2,4,11,5], sentryKills = [0,0,0,4,6,4], lowMem = [0,0,0,8,11,6], recs = [13,14,10,15,10,6];
+const lenDays = ['10/28','10/29','10/30','11/2','11/3'], medLen = [9.1,7.3,4.2,3.6,6.0];
+
+function draw() {
+  line('c-daily', days, kills, css('--series-1'), { name: 'Memory kills', every: 7, marks: [18, 21], label: 'Daily iOS memory kills, 10/12 to 11/2' });
+  bars('c-weekly', ['10/19–10/25', '10/26–11/1'], [
+    { name: 'Memory kills (Sentry)', color: css('--series-1'), values: [1031, 1045] },
+    { name: 'Crashes (Crashlytics)', color: css('--series-2'), values: [66, 78] }], { labels: true, label: 'Weekly memory kills vs Crashlytics crashes' });
+  bars('c-case', caseDays, [
+    { name: 'App "app killed"', color: css('--series-1'), values: appKills },
+    { name: 'Sentry WatchdogTermination', color: css('--series-2'), values: sentryKills }], { labels: true, label: 'Account 314787 kills per day' });
+  line('c-len', lenDays, medLen, css('--series-1'), { name: 'Median length', fmt: v => v.toFixed(1) + ' min', axisFmt: v => v.toFixed(0), max: 12, marks: [0, 3], label: 'Median recording length per day' });
+}
+draw();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 150); });
+
+table('t-daily', ['Day', 'Memory kills'], days.map((d, i) => [d, kills[i]]));
+table('t-weekly', ['Week', 'Memory kills (Sentry)', 'Crashes (Crashlytics)'], [['10/12–10/18', 852, null], ['10/19–10/25', 1031, 66], ['10/26–11/1', 1045, 78]]);
+table('t-case', ['Day', 'Recordings', 'App "app killed"', 'Sentry kills', 'Low-memory warnings'], caseDays.map((d, i) => [d, recs[i], appKills[i], sentryKills[i], lowMem[i]]));
+table('t-len', ['Day', 'Median length (min)'], lenDays.map((d, i) => [d, medLen[i]]));
+</script>
+</body>
+</html>

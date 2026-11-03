@@ -82,7 +82,7 @@ To make a rule the default again, call `PUT /{template_id}/default` on it.
 
 Any other `500` means nothing was written.
 
-**Open (decide in spec review):** the default's template has been soft-deleted (`template_deleted: true`). Unsetting works today, but `PUT /default` rejects deleted templates, so that rule could never be made the default again. The backend may return `400` for this case instead. If it does, the FE should keep the checkbox disabled when `template_deleted` is true.
+A default whose template was soft-deleted can still be unset. Inactive accounts aren't pinned. Both are out of scope.
 
 ### Example
 

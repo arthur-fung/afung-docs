@@ -73,6 +73,7 @@ layout: null
   .p-yes { background: var(--ok-bg); color: var(--ok); }
   .p-part { background: var(--lost-bg); color: var(--lost); }
   .p-new { background: var(--fail-bg); color: var(--fail); }
+  .src { display: inline-block; font-size: 11px; padding: 0 6px; margin-right: 4px; border: 1px solid var(--muted); border-radius: 4px; color: var(--muted); white-space: nowrap; }
 
   /* outcomes */
   .metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
@@ -302,6 +303,20 @@ const STAGES = [
 ];
 const PILL = { yes: ["p-yes", "exists"], part: ["p-part", "partly"], new: ["p-new", "new"] };
 const pill = s => `<span class="pill ${PILL[s][0]}">${PILL[s][1]}</span>`;
+// Where each signal comes from: today vs after the change.
+const SRC = {
+  C0: [["scribe event"], ["new app event"]],
+  C1: [["scribe event"], ["new app event"]],
+  C2: [["scribe event", "Sentry"], ["new app event"]],
+  C3: [["scribe event"], ["new app event"]],
+  C4a: [["scribe event"], ["scribe event", "new app event"]],
+  C4b: [["scribe event", "scribe table"], ["new app event", "new backend event"]],
+  B1: [["scribe table"], ["new backend event"]],
+  B2: [["scribe table"], ["new backend event"]],
+  B3: [["scribe table"], ["new backend event", "status history table"]],
+  B4: [["scribe table", "scribe event"], ["new backend event"]],
+};
+const srcTags = xs => xs.map(x => `<span class="src">${x}</span>`).join("");
 
 function renderStages(active) {
   ["start", "rec", "end", "b"].forEach(l => {
@@ -316,8 +331,8 @@ function renderStages(active) {
     <h3>${s.id} · ${s.name}</h3>
     <dl class="kv">
       <dt>What it means</dt><dd>${s.plain}</dd>
-      <dt>How we know today</dt><dd>${pill(s.today[0])} ${s.today[1]}</dd>
-      <dt>After the change</dt><dd>${s.after}</dd>
+      <dt>How we know today</dt><dd>${pill(s.today[0])} ${srcTags(SRC[s.id][0])}${s.today[1]}</dd>
+      <dt>After the change</dt><dd>${srcTags(SRC[s.id][1])}${s.after}</dd>
       <dt>Can end here as</dt><dd>${s.ends.length ? s.ends.join(" · ") : "<span style='color:var(--muted)'>(passes through)</span>"}</dd>
     </dl>`;
   document.querySelectorAll(".stage").forEach(b => b.onclick = () => renderStages(b.dataset.id));

@@ -1,0 +1,457 @@
+---
+title: "Reliability funnel: top-level plan (2026-11-02)"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reliability funnel: top-level plan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #ffffff; --ink: #1f2430; --muted: #5f6877; --line: #d5d9e0; --card: #f5f7fa;
+    --ok: #1f7a4d; --ok-bg: #e3f3ea;
+    --fail: #b3261e; --fail-bg: #fbe7e5;
+    --lost: #8a5a00; --lost-bg: #fdf0d5;
+    --gap: #5b3fb3; --gap-bg: #ece8fa;
+    --kill: #444b57; --kill-bg: #e8eaee;
+    --accent: #2457c5; --accent-bg: #e6eefc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171d; --ink: #e8eaee; --muted: #9aa3b2; --line: #333a46; --card: #1c2028;
+      --ok: #6fd3a0; --ok-bg: #163526;
+      --fail: #ff8f86; --fail-bg: #3a1c1a;
+      --lost: #f1c46a; --lost-bg: #3a2e12;
+      --gap: #b9a6ff; --gap-bg: #2a2342;
+      --kill: #c3c9d4; --kill-bg: #2a2f39;
+      --accent: #8fb1ff; --accent-bg: #1d2a47;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px 64px; }
+  nav { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; gap: 4px; padding-top: 10px; padding-bottom: 10px; flex-wrap: wrap; }
+  nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 6px; font-size: 14px; }
+  nav a:hover, nav a.on { background: var(--card); color: var(--ink); }
+  header { padding: 28px 0 8px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 44px 0 6px; scroll-margin-top: 60px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card);
+         padding: 1px 5px; border-radius: 4px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 760px) { .grid3, .grid2 { grid-template-columns: 1fr; } }
+  .big { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .card p { margin: 0; color: var(--muted); }
+  .num { display: inline-flex; width: 26px; height: 26px; border-radius: 50%; align-items: center;
+         justify-content: center; background: var(--accent-bg); color: var(--accent); font-weight: 700;
+         font-size: 13px; margin-bottom: 8px; }
+
+  /* journey */
+  .lane { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+  .lane-label { width: 82px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .stage { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 12px;
+           cursor: pointer; font: inherit; color: inherit; text-align: left; min-width: 112px; }
+  .stage small { display: block; color: var(--muted); font-size: 12px; }
+  .stage:hover { border-color: var(--accent); }
+  .stage.on { border-color: var(--accent); background: var(--accent-bg); }
+  .arrow { color: var(--muted); }
+  .detail { margin-top: 14px; min-height: 120px; }
+  .detail h3 { margin: 0 0 8px; font-size: 16px; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+
+  /* status pills */
+  .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .p-yes { background: var(--ok-bg); color: var(--ok); }
+  .p-part { background: var(--lost-bg); color: var(--lost); }
+  .p-new { background: var(--fail-bg); color: var(--fail); }
+
+  /* outcomes */
+  .metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+  .mbtn { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px;
+          padding: 5px 12px; cursor: pointer; font: inherit; font-size: 14px; }
+  .mbtn.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .groups { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .groups { grid-template-columns: repeat(2, 1fr); } }
+  .group { border-radius: 12px; padding: 12px; border: 1px solid var(--line); }
+  .group h4 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+  .g-ok { background: var(--ok-bg); } .g-ok h4 { color: var(--ok); }
+  .g-client { background: var(--fail-bg); } .g-client h4 { color: var(--fail); }
+  .g-backend { background: var(--fail-bg); } .g-backend h4 { color: var(--fail); }
+  .g-wait { background: var(--lost-bg); } .g-wait h4 { color: var(--lost); }
+  .g-out { background: var(--kill-bg); } .g-out h4 { color: var(--kill); }
+  .oc { font-size: 13px; padding: 4px 8px; border-radius: 6px; margin: 3px 0; background: var(--bg);
+        border: 1px solid transparent; transition: opacity .15s; }
+  .oc b { color: var(--muted); font-weight: 600; margin-right: 4px; }
+  .dim .oc { opacity: .28; }
+  .dim .oc.hit { opacity: 1; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .formula { margin-top: 12px; }
+
+  /* timeline */
+  .toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 8px 0 14px; }
+  .toggle button { border: 0; background: var(--bg); color: var(--ink); padding: 6px 14px; cursor: pointer; font: inherit; }
+  .toggle button.on { background: var(--accent); color: var(--bg); }
+  .tl { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 2px solid var(--line); }
+  .tl li { position: relative; padding: 6px 0 6px 12px; }
+  .tl li::before { content: ""; position: absolute; left: -25px; top: 12px; width: 12px; height: 12px;
+                   border-radius: 50%; background: var(--line); }
+  .tl li.app::before { background: var(--accent); }
+  .tl li.crash::before { background: var(--fail); }
+  .tl li.be::before { background: var(--ok); }
+  .tl li.none { color: var(--muted); font-style: italic; }
+  .tl li.none::before { background: transparent; border: 2px dashed var(--line); }
+  .tl .t { color: var(--muted); font: 12px ui-monospace, Menlo, monospace; margin-right: 8px; }
+  .verdict { margin-top: 12px; padding: 10px 12px; border-radius: 8px; }
+  .legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+
+  /* build */
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+  details { border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; background: var(--card); }
+  summary { cursor: pointer; padding: 10px 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 10px; }
+  summary .counts { font-weight: 400; display: flex; gap: 6px; }
+  details table { background: var(--bg); }
+  .phase { border-top: 4px solid var(--accent); }
+  .phase ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
+  .phase li { margin: 3px 0; }
+  .q { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+  .q div:nth-child(odd) { font-weight: 600; }
+  .q div:nth-child(even) { color: var(--muted); }
+  footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a href="#idea">The idea</a>
+  <a href="#journey">Journey</a>
+  <a href="#outcomes">Outcomes &amp; metrics</a>
+  <a href="#example">One recording</a>
+  <a href="#crashes">Crashes</a>
+  <a href="#build">What we build</a>
+  <a href="#phases">Phases</a>
+  <a href="#tools">Tools, owners &amp; questions</a>
+</div></nav>
+
+<div class="wrap">
+<header>
+  <h1>Ambient scribe reliability funnel: the plan on one page</h1>
+  <p class="sub">Top-level view of <code>20261102-reliability-funnel-prd.md</code>. Click around: stages, metrics and the example are interactive.</p>
+</header>
+
+<!-- ============ IDEA ============ -->
+<h2 id="idea">The idea</h2>
+<p class="sub">Follow every recording from "tap record" to "note in the EHR", and make every number on the dashboard clickable down to the recordings behind it.</p>
+<div class="grid3">
+  <div class="card"><div class="num">1</div><div class="big">One row per recording</div>
+    <p>Every metric (lost, failures, incomplete, crashes…) is just a count of rows in the same table. No separately computed numbers that can disagree.</p></div>
+  <div class="card"><div class="num">2</div><div class="big">Exactly one outcome each</div>
+    <p>Each recording ends in one of 18 outcomes, and stores the event that decided it, so you can always see <em>why</em>.</p></div>
+  <div class="card"><div class="num">3</div><div class="big">A timeline for each</div>
+    <p>App events, uploads, backend status changes, errors and crashes for that recording, in order, each linked to its source.</p></div>
+</div>
+<p class="sub" style="margin-top:14px">To make this possible, the app and backend send a few new ids and events. We don't work around today's gaps; we close them.</p>
+
+<!-- ============ JOURNEY ============ -->
+<h2 id="journey">The journey of a recording</h2>
+<p class="sub">Four phases (as agreed in the 11/2 meeting), ten stages underneath. Click a stage.</p>
+<div class="lane"><span class="lane-label">1 · Start</span><div id="lane-start" class="lane" style="margin:0"></div></div>
+<div class="lane"><span class="lane-label">2 · Record</span><div id="lane-rec" class="lane" style="margin:0"></div></div>
+<div class="lane"><span class="lane-label">3 · End</span><div id="lane-end" class="lane" style="margin:0"></div></div>
+<div class="lane"><span class="lane-label">4 · Backend</span><div id="lane-b" class="lane" style="margin:0"></div></div>
+<div class="card detail" id="stage-detail"></div>
+
+<!-- ============ OUTCOMES ============ -->
+<h2 id="outcomes">Outcomes and the metrics built on them</h2>
+<p class="sub">Every recording lands in exactly one box. Pick a metric to see which outcomes it counts.</p>
+<div class="metrics" id="metric-btns"></div>
+<div class="groups" id="groups"></div>
+<div class="card formula" id="formula"></div>
+
+<!-- ============ EXAMPLE ============ -->
+<h2 id="example">Following one recording</h2>
+<p class="sub">A made-up recording that the app was killed during. Compare what we can see today with what we'd see after the change.</p>
+<div class="toggle" id="tl-toggle">
+  <button data-v="today" class="on">Today</button><button data-v="after">After</button>
+</div>
+<div class="legend">
+  <span><span class="dot" style="background:var(--accent)"></span>App</span>
+  <span><span class="dot" style="background:var(--ok)"></span>Backend</span>
+  <span><span class="dot" style="background:var(--fail)"></span>Crash / OS</span>
+</div>
+<div class="card"><ul class="tl" id="tl"></ul><div class="verdict" id="tl-verdict"></div></div>
+
+<!-- ============ CRASHES ============ -->
+<h2 id="crashes">Crashes</h2>
+<p class="sub">Every crash carries the app session, device install, and the recording when there is one. The existing Crashlytics + Sentry → BigQuery pipeline stays; we add one row per crash and copy it to StarRocks.</p>
+<div class="grid3">
+  <div class="card"><div class="big">During a recording</div>
+    <p>Shows on the recording's timeline. If the recording never reached the backend, its outcome is <b>Killed: crash</b>.</p></div>
+  <div class="card"><div class="big">During upload / recovery</div>
+    <p>Linked through the device's list of open recordings, so a crash while retrying an old upload still points at that recording.</p></div>
+  <div class="card"><div class="big">Outside a recording</div>
+    <p>Login, settings, startup. Linked to the app session, and counted in our own <b>crash-free sessions</b> rate.</p></div>
+</div>
+<p class="sub" style="margin-top:12px">The crash list ranks issues by <b>recordings lost</b>, then sessions affected. Every count opens the list behind it.</p>
+
+<!-- ============ BUILD ============ -->
+<h2 id="build">What we need to build</h2>
+<p class="sub">Each item checked against today's code.
+  <span class="pill p-yes">exists</span> <span class="pill p-part">partly</span> <span class="pill p-new">new</span></p>
+<div id="build-list"></div>
+
+<!-- ============ PHASES ============ -->
+<h2 id="phases">Phases</h2>
+<div class="grid3">
+  <div class="card phase"><div class="big">P0 · Now</div><p>Instrument the app, start the funnel from today's data</p>
+    <ul><li>App: new ids, lifecycle events, auto-pause, interruptions, open-recordings list, crash keys</li><li>Depends on: iOS permission check, typed errors, watchdog</li>
+        <li>Backend: link event, status history, stop hard-deleting failures, stuck event</li>
+        <li>Retool page with recording list and timeline, using today's events</li></ul></div>
+  <div class="card phase"><div class="big">P1 · Once P0 builds are out</div><p>Switch to the new events, add crashes and alerts</p>
+    <ul><li>Classify recordings from the new events</li>
+        <li>Per-crash table, own crash-free rate</li>
+        <li>Backend stage events, Grafana alerts</li>
+        <li>Data-quality strip</li></ul></div>
+  <div class="card phase"><div class="big">P2 · Depth</div><p>Finer splits and cut-over</p>
+    <ul><li>OS exit reasons: crash vs low memory vs user closed</li>
+        <li>Note viewed / copied, recording id in backend logs</li>
+        <li>Move the OKR to the new numbers at ≥95% coverage</li></ul></div>
+</div>
+<p class="sub" style="margin-top:12px">During rollout, old app versions are classified from today's events and new ones from the new events. Both are shown separately and combined, so upgrades don't look like reliability changes. Old and new scorecards run side by side for 4 weeks before switching.</p>
+
+<!-- ============ TOOLS ============ -->
+<h2 id="tools">Tools, owners and open questions</h2>
+<div class="grid3">
+  <div class="card"><div class="big">Debugging (engineers)</div><p>Needs per-recording data and a lookup, not a dashboard. Retool list and timeline.</p></div>
+  <div class="card"><div class="big">Management funnel: pending</div><p>Pengyao wants a real drop-off funnel. Options: Retool (reads StarRocks), Grafana (no native funnel, needs Tailscale), Mixpanel (native funnel; can import from BigQuery; BAA to check).</p></div>
+  <div class="card"><div class="big">Alerts</div><p>Grafana, next to the existing crash dashboard. Alerts link to the recording list.</p></div>
+</div>
+<p class="sub" style="margin-top:12px">The tables don't change with the tool. Plan: build them first, show Pengyao the funnel, then decide.</p>
+<div class="grid3" style="margin-top:14px">
+  <div class="card"><div class="big">Arthur</div><p>Visualization, data model, tool decision; crash metadata with Prokash.</p></div>
+  <div class="card"><div class="big">Recorder engineer</div><p>App logging gaps, plus a doc of what's captured and how to read it.</p></div>
+  <div class="card"><div class="big">Bhanu</div><p>Periodic watchdog events, which the open-recordings check builds on.</p></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <div class="big" style="margin-bottom:8px">Open questions</div>
+  <div class="q">
+    <div>Who owns Grafana → Slack alerts?</div><div>Proposed: mobile platform / reliability on-call</div>
+    <div>Which scheduler builds the tables?</div><div>Data platform team's choice</div>
+    <div>Goals for new metrics</div><div>Set after 4 weeks of baseline (placeholder: reliability ≥ 99.5%)</div>
+    <div>Is "no speech" with ≥30 s of audio a failure?</div><div>Tracked separately, decide after baseline</div>
+    <div>Recording id created at tap instead of later</div><div>Backend keeps accepting both id formats</div>
+    <div>When does partial submit fire?</div><div>Confirm with the recorder owner; flagged until then</div>
+    <div>Does the backend need extra metadata?</div><div>Decide after the recorder gap doc</div>
+  </div>
+</div>
+
+<footer>No patient data anywhere in this design: ids, codes, platform and version only. Full detail in the PRD.</footer>
+</div>
+
+<script>
+const STAGES = [
+  { id: "C0", lane: "start", name: "Attempted", plain: "Provider tapped record (or resume). Pre-checks run: permission, mic, storage, memory.",
+    today: ["part", "Seen only after pre-checks pass, so blocked attempts are invisible. iOS doesn't explicitly check mic permission first (Android does)."],
+    after: "<code>ATTEMPTED</code> (recording id created here) or <code>PREFLIGHT_BLOCKED</code> with a reason. Same checks on resume.",
+    ends: ["Expected exit (permission denied, cancelled…)"] },
+  { id: "C1", lane: "start", name: "Mic live", plain: "The microphone is actually producing audio.",
+    today: ["part", "First <code>RECORDING_IN_PROGRESS</code>. Start errors are free-form strings that differ per platform."],
+    after: "<code>MIC_LIVE</code>, or <code>START_FAILED</code> with a typed error code (also on resume).",
+    ends: ["Start failed (incl. resume failed)"] },
+  { id: "C2", lane: "rec", name: "Recording & saving", plain: "Audio saved locally (encrypted); on the chunking path, chunks upload in parallel. Pauses, interruptions and kills happen here.",
+    today: ["part", "<code>CHUNK_ADDED</code> / <code>FILE_ADDED</code>. Interruptions go to Sentry only. A killed recording comes back as plain \"paused\"."],
+    after: "<code>AUDIO_PERSISTED</code>, <code>PERSIST_ERROR</code> (SQLite / file / encrypt / decrypt), <code>INTERRUPTED</code>, and <code>PAUSED</code> with reason <i>user</i> vs <i>auto after unexpected exit</i>.",
+    ends: ["Recording failed", "Paused by user, never resumed", "Killed unexpectedly"] },
+  { id: "C3", lane: "end", name: "Ended", plain: "Recording stopped.",
+    today: ["part", "<code>PARALLEL_RECORDING_ENDED</code>."],
+    after: "<code>ENDED</code> event with the reason.",
+    ends: ["Discarded (too short, deleted)", "Abandoned", "Lost"] },
+  { id: "C4a", lane: "end", name: "All audio uploaded", plain: "Wait ~15 s for in-flight uploads, retry each pending chunk up to 3×, upload the manifest.",
+    today: ["yes", "Chunking already sends good finalize events (<code>FINALIZE_SUCCESS / _PARTIAL / _FAILED / _TIMEOUT</code>, <code>MANIFEST_FAILED</code>). Non-chunking has none."],
+    after: "Keep those events, add the recording id. Add upload attempts for non-chunking.",
+    ends: ["Upload stuck"] },
+  { id: "C4b", lane: "end", name: "Handed off", plain: "Backend workflow triggered and a scribe returned.",
+    today: ["part", "<code>SCRIBE_CREATED</code> on chunking; otherwise guessed from the scribe row. A partial-submit path exists (some chunks failed)."],
+    after: "<code>HANDED_OFF</code> from the app plus <code>LINKED</code> from the backend; partial submits flagged.",
+    ends: [] },
+  { id: "B1", lane: "b", name: "Audio received", plain: "Backend has all the audio.",
+    today: ["part", "Scribe row exists. Failed combines are hard-deleted and look lost."],
+    after: "<code>AUDIO_RECEIVED</code>; failures soft-deleted with a reason.",
+    ends: ["Backend failed", "Backend stuck"] },
+  { id: "B2", lane: "b", name: "Transcribed", plain: "Speech turned into text.",
+    today: ["part", "<code>audio_length_in_seconds</code> is set."],
+    after: "<code>TRANSCRIPTION_DONE</code> / <code>_FAILED</code>.",
+    ends: ["Incomplete: no speech"] },
+  { id: "B3", lane: "b", name: "Note ready", plain: "The note was generated.",
+    today: ["part", "Inferred from <code>task_status</code>, which gets overwritten."],
+    after: "<code>NOTE_READY</code> / <code>NOTE_INCOMPLETE</code>, plus a status history.",
+    ends: ["Incomplete: not enough info", "Note ready, not delivered (counts as success)"] },
+  { id: "B4", lane: "b", name: "Delivered", plain: "Note reached the EHR, or the provider copied it.",
+    today: ["part", "<code>task_status</code> SYNCED / COPIED; <code>NOTE_COPIED</code> event."],
+    after: "<code>DELIVERY_SUCCEEDED</code> / <code>_FAILED</code>, <code>NOTE_VIEWED</code>.",
+    ends: ["Delivered (success)", "Delivery failed"] },
+];
+const PILL = { yes: ["p-yes", "exists"], part: ["p-part", "partly"], new: ["p-new", "new"] };
+const pill = s => `<span class="pill ${PILL[s][0]}">${PILL[s][1]}</span>`;
+
+function renderStages(active) {
+  ["start", "rec", "end", "b"].forEach(l => {
+    const el = document.getElementById("lane-" + l);
+    const items = STAGES.filter(s => s.lane === l);
+    el.innerHTML = items.map((s, i) =>
+      `<button class="stage ${s.id === active ? "on" : ""}" data-id="${s.id}"><small>${s.id}</small>${s.name}</button>` +
+      (i < items.length - 1 ? '<span class="arrow">→</span>' : "")).join("");
+  });
+  const s = STAGES.find(x => x.id === active);
+  document.getElementById("stage-detail").innerHTML = `
+    <h3>${s.id} · ${s.name}</h3>
+    <dl class="kv">
+      <dt>What it means</dt><dd>${s.plain}</dd>
+      <dt>How we know today</dt><dd>${pill(s.today[0])} ${s.today[1]}</dd>
+      <dt>After the change</dt><dd>${s.after}</dd>
+      <dt>Can end here as</dt><dd>${s.ends.length ? s.ends.join(" · ") : "<span style='color:var(--muted)'>(passes through)</span>"}</dd>
+    </dl>`;
+  document.querySelectorAll(".stage").forEach(b => b.onclick = () => renderStages(b.dataset.id));
+}
+renderStages("C0");
+
+const GROUPS = [
+  { cls: "g-ok", name: "Success", items: [[1, "Delivered"], [2, "Note ready, not delivered yet"]] },
+  { cls: "g-backend", name: "Backend problem", items: [[3, "Delivery failed"], [6, "Backend failed"], [7, "Backend stuck"], [4, "Incomplete: not enough info"], [5, "Incomplete: no speech"]] },
+  { cls: "g-client", name: "Device problem", items: [[9, "Start failed (incl. resume)"], [10, "Recording failed"], [11, "Upload stuck"], [13, "Abandoned before upload"], [14, "Killed unexpectedly"], [17, "Lost: vanished on device"]] },
+  { cls: "g-wait", name: "Waiting on user", items: [[12, "Paused by user, never resumed"], [15, "Still open at 48 h"], [18, "Lost: device not seen since"]] },
+  { cls: "g-out", name: "Not counted", items: [[8, "Expected exit (blocked, discarded)"], [16, "Lost: telemetry gap"]] },
+];
+const METRICS = [
+  { key: "all", label: "Show all", ids: [], f: "Every recording from the week lands in exactly one of 18 boxes. Outcomes are judged 48 h after the tap, so a week is final on Wednesday." },
+  { key: "rel", label: "Reliability (new)", ids: [1, 2], f: "<b>Reliability</b> = success (1–2) ÷ all recordings, not counting 8 and 16. Proposed goal 99.5%." },
+  { key: "lost", label: "% Lost", ids: [17, 18], f: "<b>% Lost</b> = 17 + 18 ÷ the same base. 17 (vanished: a real bug) is shown on its own. Telemetry gaps (16) are excluded so missing events never count as a lost recording. Goal 0.01%." },
+  { key: "fail", label: "% Unexpected failures", ids: [9, 10], f: "<b>% Unexpected failures</b> = start failed (incl. resume) + recording failed. Goal 0.01%." },
+  { key: "stuck", label: "% Stuck in cache", ids: [11], f: "<b>% Stuck in cache</b> = upload stuck. Today's metric also counts paused caches; those now split into 12 (paused by user) and 14 (auto-paused after a kill). Recovery rate goal 99%." },
+  { key: "inc", label: "% Incomplete", ids: [4, 5], f: "<b>% Incomplete</b> = 4 + 5 ÷ recordings the backend received. Baseline ~0.22%." },
+  { key: "kill", label: "Kills per 1k (new)", ids: [14], f: "<b>Killed unexpectedly</b> is one outcome: we can't reliably know why the app died, and every reason is unexpected. The OS exit reason (crash / low memory / user closed) is a breakdown when known. Recordings killed but later recovered keep a flag instead." },
+  { key: "be", label: "Backend failures", ids: [3, 6, 7], f: "<b>Backend failures</b>: delivery failed, failed, or stuck with no final state at 48 h." },
+];
+function renderOutcomes(key) {
+  const m = METRICS.find(x => x.key === key);
+  document.getElementById("metric-btns").innerHTML = METRICS.map(x =>
+    `<button class="mbtn ${x.key === key ? "on" : ""}" data-k="${x.key}">${x.label}</button>`).join("");
+  const g = document.getElementById("groups");
+  g.className = "groups" + (m.ids.length ? " dim" : "");
+  g.innerHTML = GROUPS.map(gr => `<div class="group ${gr.cls}"><h4>${gr.name}</h4>` +
+    gr.items.map(([n, t]) => `<div class="oc ${m.ids.includes(n) ? "hit" : ""}"><b>${n}</b>${t}</div>`).join("") + "</div>").join("");
+  document.getElementById("formula").innerHTML = m.f;
+  document.querySelectorAll(".mbtn").forEach(b => b.onclick = () => renderOutcomes(b.dataset.k));
+}
+renderOutcomes("all");
+
+const TL = {
+  today: {
+    rows: [
+      ["app", "09:02:10", "<code>PARALLEL_RECORDING_STARTED</code>"],
+      ["app", "09:02:11", "<code>RECORDING_IN_PROGRESS</code>, <code>CHUNK_ADDED</code> …"],
+      ["none", "09:14:??", "nothing (app died)"],
+      ["app", "next day", "<code>APP_KILLED_DETECTED</code>: no reason. Recording restored as \"paused\", same as a user pause"],
+      ["none", "", "Crash is in Crashlytics, but has no recording id. Can't connect it."],
+      ["none", "", "Was the device opened again? Unknown: no device id on events."],
+    ],
+    verdict: ["var(--lost-bg)", "<b>Classified as \"lost\"</b> because no evidence was found. Can't tell if it's a bug, a crash, or the phone just wasn't reopened."],
+  },
+  after: {
+    rows: [
+      ["app", "09:02:08", "<code>ATTEMPTED</code> · recording id created"],
+      ["app", "09:02:11", "<code>MIC_LIVE</code> → <code>AUDIO_PERSISTED</code>"],
+      ["app", "09:09:40", "<code>BACKGROUNDED</code>"],
+      ["crash", "09:14:02", "Crashlytics: OutOfMemory · tagged with this recording id"],
+      ["app", "09:31:00", "Next launch: <code>TERMINATED_UNEXPECTEDLY</code> reason <i>low_memory</i> · restored as <b>auto-paused</b>, not \"paused\""],
+      ["app", "09:31:01", "<code>STILL_OPEN</code>: audio still on device, 3 chunks pending"],
+      ["app", "09:31:05", "<code>FINALIZE_SUCCESS</code> (chunks retried, manifest sent) → <code>HANDED_OFF</code> scribe 123456"],
+      ["be", "09:31:06", "<code>LINKED</code> · <code>AUDIO_RECEIVED</code> → <code>NOTE_READY</code> → <code>DELIVERY_SUCCEEDED</code>"],
+    ],
+    verdict: ["var(--ok-bg)", "<b>Outcome: Delivered</b>, with flags <i>killed (low memory)</i> and <i>recovered after kill</i>. The OOM crash is counted against this recording in the crash list."],
+  },
+};
+function renderTL(v) {
+  document.querySelectorAll("#tl-toggle button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  document.getElementById("tl").innerHTML = TL[v].rows.map(([c, t, x]) =>
+    `<li class="${c}"><span class="t">${t}</span>${x}</li>`).join("");
+  const vd = document.getElementById("tl-verdict");
+  vd.style.background = TL[v].verdict[0]; vd.innerHTML = TL[v].verdict[1];
+}
+document.querySelectorAll("#tl-toggle button").forEach(b => b.onclick = () => renderTL(b.dataset.v));
+renderTL("today");
+
+const BUILD = [
+  { area: "App: ids on every event", why: "So every signal can be tied to a recording, app launch and device.", items: [
+    ["Recording id", "part", "Sent as <code>uuid</code>, but created after permission checks, and random on events outside a recording"],
+    ["App session id (per launch)", "new", ""],
+    ["Install id (per device)", "new", "Needed to tell \"vanished on device\" from \"phone not reopened\""],
+    ["Per-recording sequence number", "new", "Detects missing events"],
+  ]},
+  { area: "App: start and resume", why: "Every start or resume failure has a reason.", items: [
+    ["Attempted, blocked by pre-checks (start and resume)", "new", ""],
+    ["iOS explicit mic-permission check", "new", "Android has it; iOS doesn't"],
+    ["Start / resume failed with typed error codes", "part", "<code>START_RECORDING_ERROR</code> with per-platform strings; typed errors in progress"],
+  ]},
+  { area: "App: during recording", why: "Pauses, interruptions, save errors and kills are told apart.", items: [
+    ["Auto-paused vs user-paused", "new", "Killed recordings come back as plain \"paused\" today"],
+    ["Interruption events (call, audio focus, route change)", "part", "Sent to Sentry only; iOS calls need CallKit"],
+    ["Save errors: SQLite / file / encrypt / decrypt", "part", "SQLite exceptions reach Sentry; no consistent event"],
+    ["Killed last time", "part", "<code>APP_KILLED_DETECTED</code>, without reason or recording"],
+  ]},
+  { area: "App: end and handoff", why: "Reuse what's already good.", items: [
+    ["Chunk upload events with retry", "yes", "Already well covered"],
+    ["Finalize events (wait, retry, manifest, trigger)", "yes", "Chunking only; add the recording id"],
+    ["Non-chunking upload attempts", "new", ""],
+    ["Handed off (with scribe id)", "part", "<code>SCRIBE_CREATED</code> on chunking; partial-submit path to confirm"],
+  ]},
+  { area: "App: open-recordings list & crash tags", why: "\"Lost\" becomes a positive finding; crashes point to recordings.", items: [
+    ["Report open recordings at launch and on the watchdog tick", "new", "Builds on Bhanu's periodic events"],
+    ["Recording id + chunk number on Crashlytics and Sentry", "new", "Meeting action item"],
+    ["Session id, install id, recording phase", "new", ""],
+    ["OS exit reason (Android / iOS)", "new", "Breakdown only (P2)"],
+  ]},
+  { area: "Backend", why: "Every status change recorded; nothing erased.", items: [
+    ["Link event: recording → scribe", "new", ""],
+    ["Status history (every change)", "new", "<code>task_status</code> is overwritten today"],
+    ["Soft delete instead of hard delete on failure", "new", "Hard-deleted failures look \"lost\" today"],
+    ["Stuck event per scribe", "part", "A 15-min stuck alert exists, but writes nothing per scribe"],
+    ["Stage events: received, transcribed, note, delivery", "part", "Only upload-completed and failed exist"],
+  ]},
+  { area: "Data, views & validation", why: "Per-recording tables; checked against support tickets.", items: [
+    ["Crash pipeline into BigQuery", "yes", "Crashlytics + Sentry, daily, matches the weekly report"],
+    ["One row per crash, copied to StarRocks", "new", "With Prokash"],
+    ["Per-recording outcome + timeline tables", "new", ""],
+    ["Funnel view, recording list, timeline", "new", "Tool pending (see below)"],
+    ["Map 10–15 days of support tickets to outcomes", "new", "Acceptance test"],
+  ]},
+];
+document.getElementById("build-list").innerHTML = BUILD.map(b => {
+  const c = { yes: 0, part: 0, new: 0 };
+  b.items.forEach(i => c[i[1]]++);
+  const counts = Object.entries(c).filter(([, n]) => n).map(([k, n]) =>
+    `<span class="pill ${PILL[k][0]}">${n} ${PILL[k][1]}</span>`).join("");
+  return `<details><summary><span>${b.area} <span style="font-weight:400;color:var(--muted)">· ${b.why}</span></span><span class="counts">${counts}</span></summary>
+    <table><tr><th>Item</th><th>Today</th><th>Note</th></tr>` +
+    b.items.map(([n, s, x]) => `<tr><td>${n}</td><td>${pill(s)}</td><td style="color:var(--muted)">${x}</td></tr>`).join("") +
+    "</table></details>";
+}).join("");
+
+const links = [...document.querySelectorAll("nav a")];
+const secs = links.map(a => document.querySelector(a.getAttribute("href")));
+addEventListener("scroll", () => {
+  let i = secs.findLastIndex(s => s.getBoundingClientRect().top < 120);
+  links.forEach((a, j) => a.classList.toggle("on", j === i));
+});
+</script>
+</body>
+</html>

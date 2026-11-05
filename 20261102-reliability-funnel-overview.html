@@ -73,7 +73,6 @@ layout: null
   .p-yes { background: var(--ok-bg); color: var(--ok); }
   .p-part { background: var(--lost-bg); color: var(--lost); }
   .p-new { background: var(--fail-bg); color: var(--fail); }
-  .src { display: inline-block; font-size: 11px; padding: 0 6px; margin-right: 4px; border: 1px solid var(--muted); border-radius: 4px; color: var(--muted); white-space: nowrap; }
 
   /* outcomes */
   .metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
@@ -170,6 +169,7 @@ layout: null
 <div class="lane"><span class="lane-label">3 · End</span><div id="lane-end" class="lane" style="margin:0"></div></div>
 <div class="lane"><span class="lane-label">4 · Backend</span><div id="lane-b" class="lane" style="margin:0"></div></div>
 <div class="card detail" id="stage-detail"></div>
+<p class="sub" style="margin-top:8px">Every event here is a row in <code>scribe_events</code>, shown as <code>tag / action</code>. Events under "After the change" are proposed and don't exist yet.</p>
 
 <!-- ============ OUTCOMES ============ -->
 <h2 id="outcomes">Outcomes and the metrics built on them</h2>
@@ -261,62 +261,48 @@ layout: null
 <script>
 const STAGES = [
   { id: "C0", lane: "start", name: "Attempted", plain: "Provider tapped record (or resume). Pre-checks run: permission, mic, storage, memory.",
-    today: ["part", "Seen only after pre-checks pass, so blocked attempts are invisible. iOS doesn't explicitly check mic permission first (Android does)."],
-    after: "<code>ATTEMPTED</code> (recording id created here) or <code>PREFLIGHT_BLOCKED</code> with a reason. Same checks on resume.",
+    today: ["part", "Seen only after pre-checks pass, so blocked attempts are invisible: <code>SCRIBE_JOURNEY / PARALLEL_RECORDING_STARTED</code>, <code>SCRIBE_AUDIO_CACHE_SYNC_V2 / AUDIO_CACHE_START</code>. iOS doesn't explicitly check mic permission first (Android does)."],
+    after: "<code>RECORDING_LIFECYCLE / ATTEMPTED</code> (recording id created here) or <code>RECORDING_LIFECYCLE / PREFLIGHT_BLOCKED</code> with a reason. Same checks on resume.",
     ends: ["Expected exit (permission denied, cancelled…)"] },
   { id: "C1", lane: "start", name: "Mic live", plain: "The microphone is actually producing audio.",
-    today: ["part", "First <code>RECORDING_IN_PROGRESS</code>. Start errors are free-form strings that differ per platform."],
-    after: "<code>MIC_LIVE</code>, or <code>START_FAILED</code> with a typed error code (also on resume).",
+    today: ["part", "First <code>RESOURCE_MONITORING / RECORDING_IN_PROGRESS</code>. Start errors: <code>SCRIBE_JOURNEY / START_RECORDING_ERROR</code>, free-form strings that differ per platform."],
+    after: "<code>RECORDING_LIFECYCLE / MIC_LIVE</code>, or <code>RECORDING_LIFECYCLE / START_FAILED</code> with a typed error code (also on resume).",
     ends: ["Start failed (incl. resume failed)"] },
   { id: "C2", lane: "rec", name: "Recording & saving", plain: "Audio saved locally (encrypted); on the chunking path, chunks upload in parallel. Pauses, interruptions and kills happen here.",
-    today: ["part", "<code>CHUNK_ADDED</code> / <code>FILE_ADDED</code>. Interruptions go to Sentry only. A killed recording comes back as plain \"paused\"."],
-    after: "<code>AUDIO_PERSISTED</code>, <code>PERSIST_ERROR</code> (SQLite / file / encrypt / decrypt), <code>INTERRUPTED</code>, and <code>PAUSED</code> with reason <i>user</i> vs <i>auto after unexpected exit</i>.",
+    today: ["part", "<code>SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_ADDED</code> (chunking) / <code>SCRIBE_AUDIO_CACHE_SYNC_V2 / FILE_ADDED</code> (non-chunking); <code>SCRIBE_JOURNEY / PARALLEL_RECORDING_PAUSED</code>, <code>SCRIBE_JOURNEY / MID_RECORDING_ERROR</code>; <code>APP_LIFECYCLE / APP_KILLED_DETECTED</code> on the next launch. Interruptions go to Sentry only. A killed recording comes back as plain \"paused\"."],
+    after: "<code>RECORDING_LIFECYCLE / AUDIO_PERSISTED</code>, <code>RECORDING_LIFECYCLE / PERSIST_ERROR</code> (SQLite / file / encrypt / decrypt), <code>RECORDING_LIFECYCLE / INTERRUPTED</code>, <code>RECORDING_LIFECYCLE / PAUSED</code> with reason <i>user</i> vs <i>auto after unexpected exit</i>, and <code>RECORDING_LIFECYCLE / TERMINATED_UNEXPECTEDLY</code> on the next launch.",
     ends: ["Recording failed", "Paused by user, never resumed", "Killed unexpectedly"] },
   { id: "C3", lane: "end", name: "Ended", plain: "Recording stopped.",
-    today: ["part", "<code>PARALLEL_RECORDING_ENDED</code>."],
-    after: "<code>ENDED</code> event with the reason.",
+    today: ["part", "<code>SCRIBE_JOURNEY / PARALLEL_RECORDING_ENDED</code>."],
+    after: "<code>RECORDING_LIFECYCLE / ENDED</code> with the reason.",
     ends: ["Discarded (too short, deleted)", "Abandoned", "Lost"] },
   { id: "C4a", lane: "end", name: "All audio uploaded", plain: "Wait ~15 s for in-flight uploads, retry each pending chunk up to 3×, upload the manifest.",
-    today: ["yes", "Chunking already sends good finalize events (<code>FINALIZE_SUCCESS / _PARTIAL / _FAILED / _TIMEOUT</code>, <code>MANIFEST_FAILED</code>). Non-chunking has none."],
-    after: "Keep those events, add the recording id. Add upload attempts for non-chunking.",
+    today: ["yes", "Chunking only: <code>SCRIBE_CHUNKING / FINALIZE_SUCCESS</code> / <code>_PARTIAL</code> / <code>_FAILED</code> / <code>_TIMEOUT</code>, <code>SCRIBE_CHUNKING / MANIFEST_FAILED</code>. Non-chunking has none."],
+    after: "Keep the <code>SCRIBE_CHUNKING / FINALIZE_*</code> events and add the recording id. Non-chunking: <code>RECORDING_LIFECYCLE / UPLOAD_ATTEMPT</code> / <code>RECORDING_LIFECYCLE / UPLOAD_FAILED</code>.",
     ends: ["Upload stuck"] },
   { id: "C4b", lane: "end", name: "Handed off", plain: "Backend workflow triggered and a scribe returned.",
-    today: ["part", "<code>SCRIBE_CREATED</code> on chunking; otherwise guessed from the scribe row. A partial-submit path exists (some chunks failed)."],
-    after: "<code>HANDED_OFF</code> from the app plus <code>LINKED</code> from the backend; partial submits flagged.",
+    today: ["part", "<code>SCRIBE_CHUNKING / SCRIBE_CREATED</code> on chunking; otherwise guessed from the scribe row. A partial-submit path exists (some chunks failed)."],
+    after: "<code>RECORDING_LIFECYCLE / HANDED_OFF</code> from the app plus <code>SCRIBE_LIFECYCLE / LINKED</code> from the backend; partial submits flagged.",
     ends: [] },
   { id: "B1", lane: "b", name: "Audio received", plain: "Backend has all the audio.",
-    today: ["part", "Scribe row exists. Failed combines are hard-deleted and look lost."],
-    after: "<code>AUDIO_RECEIVED</code>; failures soft-deleted with a reason.",
+    today: ["part", "No event: the scribe row exists (some <code>NORMANDY_WORKFLOWS_*</code> events). Failed combines are hard-deleted and look lost."],
+    after: "<code>SCRIBE_LIFECYCLE / AUDIO_RECEIVED</code>; failures soft-deleted with <code>SCRIBE_FAILED</code> and a reason.",
     ends: ["Backend failed", "Backend stuck"] },
   { id: "B2", lane: "b", name: "Transcribed", plain: "Speech turned into text.",
-    today: ["part", "<code>audio_length_in_seconds</code> is set."],
-    after: "<code>TRANSCRIPTION_DONE</code> / <code>_FAILED</code>.",
+    today: ["part", "No event: <code>audio_length_in_seconds</code> is set on the scribe row."],
+    after: "<code>SCRIBE_LIFECYCLE / TRANSCRIPTION_DONE</code> / <code>_FAILED</code>.",
     ends: ["Incomplete: no speech"] },
   { id: "B3", lane: "b", name: "Note ready", plain: "The note was generated.",
-    today: ["part", "Inferred from <code>task_status</code>, which gets overwritten."],
-    after: "<code>NOTE_READY</code> / <code>NOTE_INCOMPLETE</code>, plus a status history.",
+    today: ["part", "No event: inferred from <code>task_status</code> on the scribe row, which gets overwritten."],
+    after: "<code>SCRIBE_LIFECYCLE / NOTE_READY</code> / <code>NOTE_INCOMPLETE</code>, plus <code>SCRIBE_LIFECYCLE / STATUS_CHANGED</code> on every status change and a status history table.",
     ends: ["Incomplete: not enough info", "Note ready, not delivered (counts as success)"] },
   { id: "B4", lane: "b", name: "Delivered", plain: "Note reached the EHR, or the provider copied it.",
-    today: ["part", "<code>task_status</code> SYNCED / COPIED; <code>NOTE_COPIED</code> event."],
-    after: "<code>DELIVERY_SUCCEEDED</code> / <code>_FAILED</code>, <code>NOTE_VIEWED</code>.",
+    today: ["part", "<code>task_status</code> SYNCED / COPIED on the scribe row; tag <code>NOTE_COPIED</code> (no action)."],
+    after: "<code>SCRIBE_LIFECYCLE / DELIVERY_SUCCEEDED</code> / <code>_FAILED</code>; <code>RECORDING_LIFECYCLE / NOTE_VIEWED</code> from the app.",
     ends: ["Delivered (success)", "Delivery failed"] },
 ];
 const PILL = { yes: ["p-yes", "exists"], part: ["p-part", "partly"], new: ["p-new", "new"] };
 const pill = s => `<span class="pill ${PILL[s][0]}">${PILL[s][1]}</span>`;
-// Where each signal comes from: today vs after the change.
-const SRC = {
-  C0: [["scribe event"], ["new app event"]],
-  C1: [["scribe event"], ["new app event"]],
-  C2: [["scribe event", "Sentry"], ["new app event"]],
-  C3: [["scribe event"], ["new app event"]],
-  C4a: [["scribe event"], ["scribe event", "new app event"]],
-  C4b: [["scribe event", "scribe table"], ["new app event", "new backend event"]],
-  B1: [["scribe table"], ["new backend event"]],
-  B2: [["scribe table"], ["new backend event"]],
-  B3: [["scribe table"], ["new backend event", "status history table"]],
-  B4: [["scribe table", "scribe event"], ["new backend event"]],
-};
-const srcTags = xs => xs.map(x => `<span class="src">${x}</span>`).join("");
 
 function renderStages(active) {
   ["start", "rec", "end", "b"].forEach(l => {
@@ -331,8 +317,8 @@ function renderStages(active) {
     <h3>${s.id} · ${s.name}</h3>
     <dl class="kv">
       <dt>What it means</dt><dd>${s.plain}</dd>
-      <dt>How we know today</dt><dd>${pill(s.today[0])} ${srcTags(SRC[s.id][0])}${s.today[1]}</dd>
-      <dt>After the change</dt><dd>${srcTags(SRC[s.id][1])}${s.after}</dd>
+      <dt>How we know today</dt><dd>${pill(s.today[0])} ${s.today[1]}</dd>
+      <dt>After the change</dt><dd>${s.after}</dd>
       <dt>Can end here as</dt><dd>${s.ends.length ? s.ends.join(" · ") : "<span style='color:var(--muted)'>(passes through)</span>"}</dd>
     </dl>`;
   document.querySelectorAll(".stage").forEach(b => b.onclick = () => renderStages(b.dataset.id));

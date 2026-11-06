@@ -68,8 +68,8 @@ All counts are recordings attempted in the Mon–Sun UTC week, shown as a rate w
 
 **How many are incomplete, and why?** (no mic? hardware problem?)
 - **Answered by:** outcomes 4 (not enough info) and 5 (no speech), split by ≥30 s of near-silent audio
-- **Evidence:** `scribe.task_status = INCOMPLETE`, `error_message`, audio length
-- **Today:** ✅ From Postgres, as in the weekly report.
+- **Evidence:** `scribe.task_status = INCOMPLETE`, `error_message`, audio length; on-device `AUDIO_QUALITY` (silent seconds, peak / average level, input device) and `MIC_LOST`, which split "no speech" into a mic problem (flags `mic_silent`, `low_input`, `ever_mic_lost`) vs. nobody talking
+- **Today:** 🟡 The count is ✅ from Postgres, as in the weekly report. The mic-vs-nobody-talked split is ❌ until `AUDIO_QUALITY` / `MIC_LOST` ship. T40, T41, T42.
 
 **How many failed or got stuck in the backend?**
 - **Answered by:** outcomes 6 (backend failed), 7 (backend stuck)

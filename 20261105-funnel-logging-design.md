@@ -54,6 +54,8 @@ flowchart LR
 - **The outcome job:** daily, over recordings attempted in the last 3 days, plus any recording with a late event.
   - It writes `recording_outcome` in StarRocks.
   - It sends one `RECORDING_OUTCOME` per recording, and again only if the outcome changes.
+  - It derives the mic flags (§2.2) and writes `outcome`, `drop_stage` and the flags onto the Mixpanel **group profile** for the `recording_id`, so any funnel step can be broken down by them (§5).
+  - It reports the share of lost recordings that have a later event from the same `install_id` (the telemetry-gap safety check).
 - **Grafana:** reads StarRocks over the MySQL protocol.
 
 **Backend change needed:**
@@ -70,13 +72,16 @@ flowchart LR
 | `recording_id` | Same value as the `uuid` column. Created at `ATTEMPTED`. | app; backend uses `scribe.uuid` |
 | `app_session_id` | One per app launch / page load | app |
 | `install_id` | One per install / browser profile, kept on the device | app |
-| `recording_seq` | Counter per recording, saved with the open-recording entry so it survives restarts | app |
 | `client_event_id` | Random per event, kept across retries | app (exists); backend must keep it in payload |
 | `contract_version` | `1` | app |
 | `path` | `chunking` / `single_file` | app |
 | `on_resume` | true when the event belongs to a resume | app |
 
 **Already on every row:** `device_type`, `browser_name`, `version`, `scribe_account_id`, `scribe_id`, `timestamp` (phone time), `created_at` (server time).
+
+**Ordering:** by the phone's `timestamp`, with `created_at` as the tiebreak. There is no per-recording sequence number. Mixpanel doesn't need one: it orders by `time` and dedupes by `$insert_id`.
+
+**Telemetry gaps:** outcome 16 relies on `EVENTS_DROPPED` and the `install_id` check (did the phone come back?). The outcome job also reports the share of "lost" recordings (17 / 18) that have a later event from the same `install_id`. If that share is high, add a per-recording counter back.
 
 **No patient data** in any field. Today `patient_name` is sent in four payloads and has to be removed first (T21).
 
@@ -98,9 +103,11 @@ flowchart LR
 | F5b | C2 | `RECORDING_LIFECYCLE / AUDIO_PERSISTED` (single-file / web single-file) | storage, bytes | 🆕 |
 | F6 | C2 | `SCRIBE_JOURNEY / PARALLEL_RECORDING_PAUSED` | reason | ➕ |
 | F7 | C2 | `RECORDING_LIFECYCLE / INTERRUPTED` | source | 🆕 |
+| F7b | C2 | `RECORDING_LIFECYCLE / MIC_LOST` | source (bluetooth_disconnect / route_change / mic_taken / unknown), recovered, ms_without_audio | 🆕 |
 | F8 | C2 | `RECORDING_LIFECYCLE / RECORDING_FAILED` | stage, error_code | 🆕 |
 | F9 | C2 / K | `RECORDING_LIFECYCLE / TERMINATED_UNEXPECTEDLY` | last_phase, last_seen_at, restored_as | 🆕 |
 | F10 | C3 | `SCRIBE_JOURNEY / PARALLEL_RECORDING_ENDED` | reason, recording_length | ➕ 🔁 |
+| F10b | C3 / K | `RECORDING_LIFECYCLE / AUDIO_QUALITY` (**once per recording**, at ENDED, or at TERMINATED_UNEXPECTEDLY with the last heartbeat value) | silent_seconds, peak_dbfs, avg_dbfs, clipped_pct, input_device | 🆕 |
 | F11 | C3 | `RECORDING_LIFECYCLE / DISCARDED` | reason | 🆕 |
 | F12 | C4a | `SCRIBE_CHUNKING / FINALIZE_SUCCESS`, `FINALIZE_PARTIAL`, `FINALIZE_FAILED`, `FINALIZE_TIMEOUT` | stage, error_class, chunks_failed | ✅ |
 | F12b | C4a | `RECORDING_LIFECYCLE / UPLOAD_FAILED` (single-file) | http_status, error_code, attempt_n | 🆕 |
@@ -111,10 +118,17 @@ flowchart LR
 | F17 | B2 | `SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_TRANSCRIPTIONS_AND_OCRS_COMPLETED` | — | ✅ (backend) |
 | F18 | B3 | `SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_ALL_TASKS_COMPLETED` (first only) | — | ✅ (backend) |
 | F19 | B1–B4 | `SCRIBE_LIFECYCLE / STATUS_CHANGED` | from, to, reason_code | 🆕 (backend) |
-| F20 | — | `RECORDING_LIFECYCLE / RECORDING_OUTCOME` | outcome (1–18), outcome_evidence, flags | 🆕 (outcome job) |
+| F20 | — | `RECORDING_LIFECYCLE / RECORDING_OUTCOME` | outcome (1–18), outcome_evidence, drop_stage, flags | 🆕 (outcome job) |
+
+**Flags the outcome job derives from the raw numbers** (thresholds live in the job, so they change without an app release):
+- `mic_silent`: `silent_seconds` above the threshold (e.g. ≥ 30 s), or peak level below the floor;
+- `low_input`: average level below the floor;
+- `clipped`: `clipped_pct` above the threshold;
+- `ever_mic_lost`: any `MIC_LOST`.
 
 **Not forwarded (they stay in scribe_events for Grafana):**
 - 30-second resource pings;
+- the rolling audio level carried on the 30 s `RECORDING_IN_PROGRESS` heartbeat (cumulative `silent_seconds`, `peak_dbfs`, `avg_dbfs`, `clipped_pct`, `input_device`); only the final value goes out, as `AUDIO_QUALITY`;
 - every chunk after the first;
 - upload retries;
 - cache health;
@@ -147,6 +161,9 @@ Code paths are in `scribe-mobile/lib/src/features/` unless noted. Line numbers a
 | C2 | first CHUNK_ADDED (+ chunk_index, bytes) | `record/data/cache_repository.dart:1397` |
 | C2 | PAUSED reason | `pauseParallelRecording()` callers (PRD §5.2.3) |
 | C2 | INTERRUPTED | Android call `record/providers/recording_state_notifier.dart:855`; iOS interruption begin `:955`; device change `record/providers/device_change_mixin.dart:107` |
+| C2 | MIC_LOST | Route change / headset or Bluetooth disconnect in `device_change_mixin.dart:107`; the stream listener (`chunking_recording_state_notifier.dart:878`) when packets stop for more than a few seconds mid-recording; `recovered` set when packets resume |
+| C2 | Audio level sampling | In the same stream listener: per packet, update cumulative `silent_seconds`, `peak_dbfs`, `avg_dbfs`, `clipped_pct`; copy onto the 30 s `RECORDING_IN_PROGRESS` heartbeat |
+| C3 | AUDIO_QUALITY | Next to ENDED (`chunking_recording_state_notifier.dart:1762`); on kill, sent at the next launch from the last heartbeat value |
 | K | TERMINATED_UNEXPECTEDLY | next launch, replacing the check in `main/providers/app_lifecycle_provider.dart:328`; started → `auto_paused` in `cache_repository.dart:1975` |
 | C3 | ENDED reason | `chunking_recording_state_notifier.dart:1762`; too-short path `recording_state_notifier.dart:1403-1459` |
 | C4a | FINALIZE_* | `record/services/chunking_analytics.dart` (exists) |
@@ -159,6 +176,8 @@ Code paths are in `scribe-mobile/lib/src/features/` unless noted. Line numbers a
 |---|---|---|
 | C1 | MIC_LIVE | first amplitude sample (`record/providers/native_recording_state_notifier.dart`, `amplitudeSubscription`) |
 | C2 | AUDIO_PERSISTED | first time the file has data; `FILE_ADDED` doesn't count (it fires in initialize, `:397`) |
+| C2 | MIC_LOST, audio level | Same fields as chunking. Level comes from the same `amplitudeSubscription` samples as MIC_LIVE; MIC_LOST when amplitude samples stop mid-recording |
+| C3 | AUDIO_QUALITY | Next to ENDED (`recording_state_notifier.dart:1563`) |
 | C3 | ENDED | `recording_state_notifier.dart:1563` |
 | C4a | UPLOAD_ATTEMPT / UPLOAD_FAILED | `record/providers/cache_upload_provider.dart` `upload` (:175); today only `SCRIBE_UPLOAD_ERROR` |
 | C4b | SCRIBE_CREATED | **new on this path**: after the trigger succeeds (`cache_upload_provider.dart`, before `AUDIO_CACHE_UPLOAD_ENDED` :622) |
@@ -171,7 +190,8 @@ The same Flutter code as mobile, built for web, so the chunking and single-file 
 |---|---|
 | Kills | No OS kill; a page refresh or tab close is the "kill". Open-recording entry in **localStorage** written at ATTEMPTED (today only on unload while recording, `app_lifecycle_provider.dart:179-202`). TERMINATED_UNEXPECTEDLY on next page load with `last_phase`. |
 | Pre-checks | Duplicate-tab check active; storage warning skipped |
-| Interruptions | No OS interruption events. Device change via `MIC_CHANGE_*`. |
+| Interruptions | No OS interruption events. Device change via `MIC_CHANGE_*`, which also raises `MIC_LOST` when the input goes away mid-recording. |
+| Audio level | Same sampling as mobile. The web keeps the running values in memory and in the localStorage open-recording entry, so `AUDIO_QUALITY` can still be sent after a refresh. |
 | Tab state | `WEB_LIFECYCLE / TAB_FROZEN`, `TAB_UNFROZEN` (timeline only) |
 | Single-file web | Audio is in memory until stop, so a refresh loses it. AUDIO_PERSISTED only at stop. |
 | Extension | `SCRIBE_JOURNEY / EXTENSION_MINIMIZED_DURING_RECORDING` (timeline only) |
@@ -370,7 +390,8 @@ sequenceDiagram
       JOB->>SE: RECORDING_OUTCOME (12, 14 or 15: still on the phone)
     end
   end
-  Note over JOB: checked first: recording_seq gaps or dropped events give 16 Telemetry gap
+  Note over JOB: checked first: EVENTS_DROPPED from the session gives 16 Telemetry gap
+  Note over JOB: safety check: share of 17 / 18 with a later event from the same install_id
 ```
 
 ### 4.10 Single-file recording
@@ -392,6 +413,66 @@ sequenceDiagram
   SE->>MP: F14
 ```
 
+### 4.11 Silent mic the whole recording
+
+```mermaid
+sequenceDiagram
+  participant App
+  participant SE as scribe_events
+  participant MP as Mixpanel
+  participant BE as Backend
+  participant JOB as Outcome job
+  App->>SE: ATTEMPTED, MIC_LIVE (packets arrive, but near-silent)
+  SE->>MP: F1, F3
+  Note over App: heartbeat every 30 s carries silent_seconds, peak_dbfs, avg_dbfs
+  App->>SE: PARALLEL_RECORDING_ENDED, AUDIO_QUALITY (silent_seconds high, peak very low)
+  SE->>MP: F10, F10b
+  App->>BE: upload + trigger
+  App->>SE: SCRIBE_CREATED
+  BE->>SE: NOTE_INCOMPLETE (no_speech)
+  JOB->>MP: RECORDING_OUTCOME (5 Incomplete: no speech), flag mic_silent
+  Note over JOB,MP: mic_silent splits "no speech" into mic problem vs nobody talked
+```
+
+### 4.12 Mic dropped mid-recording
+
+```mermaid
+sequenceDiagram
+  participant OS
+  participant App
+  participant SE as scribe_events
+  participant MP as Mixpanel
+  App->>SE: ATTEMPTED, MIC_LIVE, CHUNK_ADDED
+  SE->>MP: F1, F3, F5
+  OS->>App: Bluetooth headset disconnected (route change)
+  App->>SE: MIC_LOST (source bluetooth_disconnect)
+  SE->>MP: F7b
+  alt packets resume on the phone mic
+    App->>SE: MIC_LOST update (recovered true, ms_without_audio)
+    Note over SE,MP: recording continues. Flag ever_mic_lost; outcome from how it ends
+  else no audio comes back
+    App->>SE: PARALLEL_RECORDING_ENDED (reason user), AUDIO_QUALITY (silent_seconds high)
+    Note over SE,MP: flag ever_mic_lost + mic_silent; audio is shorter than the visit (audio_discrepancy)
+  end
+```
+
+### 4.13 Incomplete scribe linked to the device audio
+
+```mermaid
+sequenceDiagram
+  participant SE as scribe_events
+  participant BE as Backend
+  participant JOB as Outcome job
+  participant MP as Mixpanel
+  BE->>SE: NOTE_INCOMPLETE (not_enough_info or no_speech)
+  JOB->>SE: read AUDIO_QUALITY, MIC_LOST for the same recording_id
+  alt mic_silent or ever_mic_lost
+    JOB->>MP: outcome 4 / 5 + flag mic_silent / ever_mic_lost (device cause)
+  else normal levels
+    JOB->>MP: outcome 4 / 5, no mic flag (nobody talked, or a short visit)
+  end
+```
+
 ---
 
 ## 5. Mixpanel setup
@@ -409,8 +490,13 @@ sequenceDiagram
   6. NORMANDY_WORKFLOWS_ALL_TASKS_COMPLETED
   7. STATUS_CHANGED to SYNCED / COPIED / MDS
 - **Conversion window:** 48 h, the same as the outcome horizon.
-- **Breakdowns:** platform, app_version, path, PREFLIGHT_BLOCKED reason, START_FAILED error_code, PAUSED reason, TERMINATED last_phase.
-- **Outcome report:** `RECORDING_OUTCOME` by outcome × week, the same numbers as Grafana and the weekly report.
+- **Breakdowns known when the event is sent:** platform, app_version, path, PREFLIGHT_BLOCKED reason, START_FAILED error_code, PAUSED reason, TERMINATED last_phase, `AUDIO_QUALITY` input_device.
+- **One view for everything:** the same funnel, with a "break down by" setting. No breakdown shows the totals (near real time). Breaking down by outcome or flag explains each drop-off.
+- **Breakdown by final outcome (group profile):** the outcome is only known 48 h after the attempt, so it can't sit on the funnel's events. The daily job writes `outcome`, `drop_stage`, `mic_silent`, `low_input`, `clipped`, `ever_mic_lost` and the other flags onto the `recording_id` group profile. In the funnel report, break down by those group properties.
+  - Each step's drop-off then splits into reasons, e.g. between ENDED and SCRIBE_CREATED: upload stuck, lost (device not seen since), abandoned, paused by user.
+  - Recordings younger than 48 h have no profile values yet and show as "unknown".
+  - Needs Group Analytics (open item 2).
+- **Not included:** a separate outcome-mix report. The Grafana ops panels and the weekly report keep that view.
 
 ---
 
@@ -426,6 +512,33 @@ sequenceDiagram
 
 ---
 
+## 6b. Work to do
+
+**App (scribe-mobile)**
+- [ ] Common fields on every event: `recording_id`, `app_session_id`, `install_id`, `client_event_id`, `contract_version`, `path`, `on_resume`
+- [ ] New events: `ATTEMPTED`, `PREFLIGHT_BLOCKED`, `MIC_LIVE`, `START_FAILED`, `TERMINATED_UNEXPECTEDLY`, `ABANDONED`
+- [ ] `MIC_LOST` for a mic that drops mid-recording
+- [ ] Audio level sampling on the 30 s heartbeat; `AUDIO_QUALITY` once at the end
+- [ ] `SCRIBE_CREATED` on every path (single-file, background retry)
+- [ ] Web: localStorage open-recording entry + `sendBeacon` on unload
+
+**Backend (normandy)**
+- [ ] Keep `client_event_id` in the payload
+- [ ] `SCRIBE_LIFECYCLE / STATUS_CHANGED` events
+
+**Pipeline**
+- [ ] Pub/Sub → Mixpanel subscriber (filter, `/import`, retry)
+- [ ] Daily outcome job: outcome 1–18, flags (`mic_silent`, `low_input`, `ever_mic_lost`…), `RECORDING_OUTCOME`, write outcome + flags to the `recording_id` group profile, lost-with-later-event safety check
+
+**Mixpanel**
+- [ ] Approval (BAA / security), Group Analytics confirmed, project + group key
+- [ ] One funnel with breakdowns by outcome, flag, platform, version
+
+**Grafana**
+- [ ] Recording list, timeline, ops panels, alerts
+
+---
+
 ## 7. New tasks (added to the task list)
 
 | # | Task | Owner | Phase |
@@ -433,8 +546,12 @@ sequenceDiagram
 | T35 | Pub/Sub → Mixpanel subscriber: filter the funnel events, map, send with `/import` and `$insert_id`, retry queue | Backend (TBD) | P0 |
 | T36 | Keep `client_event_id` (in payload) on every app event | Backend (TBD) | P0 |
 | T37 | Mixpanel approval (BAA / security), project, Group Analytics on `recording_id` | Arthur | P0 |
-| T38 | Daily outcome job in StarRocks → `recording_outcome` + `RECORDING_OUTCOME` events | Arthur | P1 |
+| T38 | Daily outcome job in StarRocks → `recording_outcome` + `RECORDING_OUTCOME` events; includes the lost-with-later-event safety check | Arthur | P1 |
 | T39 | Grafana recording list, timeline, ops panels (replaces the Retool page) | Arthur | P0 |
+| T40 | Client audio-level sampling (rolling on the heartbeat) + `AUDIO_QUALITY` at the end | App (TBD) | P0 |
+| T41 | `MIC_LOST` event (route change, headset disconnect, packets stop mid-recording) | App (TBD) | P0 |
+| T42 | Outcome job: derive mic flags (`mic_silent`, `low_input`, `clipped`, `ever_mic_lost`) and write outcome + flags to the `recording_id` group profile | Arthur | P1 |
+| T43 | Mixpanel funnel with breakdown by group-profile outcome and flags | Arthur | P1 |
 
 ## 8. Open items
 
@@ -444,5 +561,9 @@ sequenceDiagram
 4. **Pub/Sub flag:** is `is_publish_scribe_event_enabled` on in production for all platforms?
 5. **Grafana on StarRocks:** confirm the data source and access (Tailscale for viewers).
 6. **Payload queries:** keep Grafana queries filtered on tag / uuid / time first. If timeline queries are still slow, revisit promoting a few fields to columns.
+7. **Group-profile breakdown:** confirm Mixpanel can break a funnel step down by a group profile property on the plan, and how long a profile update takes to show.
+8. **Volume:** `MIC_LOST` and `AUDIO_QUALITY` add about 1–2 events per recording (roughly +0.4–0.7M a week). Re-check item 3.
+9. **Privacy:** confirm audio level numbers and `input_device` are acceptable to send. No audio content is sent.
+10. **PRD follow-up:** done 11/6. `recording_seq` removed; `MIC_LOST`, `AUDIO_QUALITY` and the mic flags added to PRD §5.2 and §6.4. The event index (T19) still mentions `recording_seq`.
 
 {% endraw %}

@@ -61,7 +61,7 @@ These are the acceptance criteria for the whole project.
 | R3 | Each recording's life is described by a small, versioned set of **lifecycle events**, each sent exactly once per transition, with a per-recording sequence number. **Every recording ends in an explicit terminal event**, or is classified as lost by a rule that names the last evidence seen. |
 | R4 | The backend records every status change for a scribe as an event or a history row. **Nothing is hard-deleted** without first writing a terminal event. |
 | R5 | Every dashboard number links to the list of recordings or sessions it counts. Every row in that list links to the recording's timeline. Every timeline entry links to its source: the event, scribe row, Sentry event or Crashlytics issue. |
-| R6 | Missing telemetry is measurable. Sequence gaps and dropped events are counted, so "lost" can be told apart from "we lost the events". |
+| R6 | Missing telemetry is measurable. Dropped events are counted, so "lost" can be told apart from "we lost the events". |
 | R7 | No patient data in any of this. Ids, codes, platform and version only. Patient names are removed from the existing event payloads (gap G14). |
 
 ## 3. Goals, non-goals, users
@@ -119,11 +119,10 @@ Add these to `DefaultEventTrackerService._buildEventData` (`scribe-mobile/lib/se
 |---|---|---|
 | `app_session_id`, `install_id` | R2 | ❌ |
 | `recording_id` | Taken from the active recording context. **Remove the random-UUID fallback**: no recording means null, not a fake id. | 🟡 Sent as `uuid`; falls back to a random UUID per event |
-| `recording_seq` | Per-recording counter, persisted with the local cache so it survives restarts. Set only on lifecycle events. | ❌ |
 | `client_ts`, `monotonic_ms` | Wall clock (can be hours off, see LLM-21067) plus a monotonic clock for ordering within a session | 🟡 Wall clock sent as `timestamp`; no monotonic clock |
 | `contract_version` | e.g. `1`. Lets the classifier pick the contract path or the legacy path (§10). | ❌ (`version` is the app version) |
 
-The server adds `received_at` (exists today as `created_at`). **Cohorting uses `received_at`; ordering uses `recording_seq`.**
+The server adds `received_at` (exists today as `created_at`). **Cohorting uses `received_at`; ordering uses the client `timestamp` (with `monotonic_ms` inside a session), and `received_at` breaks ties.** There is no per-recording sequence number (decided 11/6): Mixpanel orders by `time` and dedupes by `client_event_id`, and a counter only helps for gaps in the middle of a recording's events.
 
 ### 5.2 App lifecycle events (reuse existing events first)
 
@@ -150,7 +149,9 @@ Full event-by-event trace of today's app and backend: `docs/20261105-recording-j
 | Start failed | `RECORDING_LIFECYCLE / START_FAILED` | Between ATTEMPTED (or a resume) and MIC_LIVE. One sender, at most once per attempt (§5.2.2). | `error_code` (typed, §5.7), `on_resume`, `sentry_event_id` | ✅ (on resume: unless resumed later) | 🆕 Old `SCRIBE_FAILED / ON_START` and `START_RECORDING_ERROR` stay for old dashboards | 🟡 `START_RECORDING_ERROR` has hard-coded text and no stack; other start failures go to Sentry or a server log only |
 | Audio saved on the phone | first `SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_ADDED` (chunking). Non-chunking mobile / web: `RECORDING_LIFECYCLE / AUDIO_PERSISTED` | First chunk written to the local database; non-chunking: first audio data on disk / in the browser | `chunk_index`, `bytes` (added) | | ➕ chunking; 🆕 non-chunking only | 🟡 `CHUNK_ADDED` has only `filePartId`. `FILE_ADDED` fires before the mic starts, so it proves nothing. Web non-chunking: nothing. |
 | Save failed | DB: `FILE_PART_INSERT_FAILED`, `AUDIO_CACHE_UPDATE_FAILED`. Others: `RECORDING_LIFECYCLE / PERSIST_ERROR` | A local save step failed (may be retried, so not terminal). Giving up → `RECORDING_FAILED{stage: persist}`. | `step`: file_write / encrypt / decrypt; `storage`; `chunk_index`; `error_code`; `will_retry` | | ✅ DB; 🆕 file / encrypt / decrypt | 🟡 DB failures have events; encrypt / decrypt mostly Sentry only |
-| Interrupted by the OS | `RECORDING_LIFECYCLE / INTERRUPTED` / `INTERRUPTION_ENDED` | **Only when the OS says the mic was taken:** Android call (`recording_state_notifier.dart:855`), iOS interruption begin (`:955`), route change | `source`: call / interruption / route_change / mic_lost | | 🆕 | 🟡 Not logged, except the *end* of an iOS interruption (`SCRIBE_JOURNEY / PHONE_CALL_<type>`). On iOS, telling a call apart needs CallKit. |
+| Interrupted by the OS | `RECORDING_LIFECYCLE / INTERRUPTED` / `INTERRUPTION_ENDED` | **Only when the OS says the mic was taken:** Android call (`recording_state_notifier.dart:855`), iOS interruption begin (`:955`), route change | `source`: call / interruption | | 🆕 (route change and mic loss go to `MIC_LOST`, below) | 🟡 Not logged, except the *end* of an iOS interruption (`SCRIBE_JOURNEY / PHONE_CALL_<type>`). On iOS, telling a call apart needs CallKit. |
+| Mic dropped | `RECORDING_LIFECYCLE / MIC_LOST` | Input went away mid-recording: Bluetooth / headset disconnect, route change, another app took the mic, or packets stop for more than a few seconds. Web: `MIC_CHANGE_*`. | `source`: bluetooth_disconnect / route_change / mic_taken / unknown; `recovered`; `ms_without_audio` | | 🆕 | ❌ Only `MIC_CHANGE_*` timeline events |
+| Audio level | Rolling fields on the 30 s `RECORDING_IN_PROGRESS` heartbeat; `RECORDING_LIFECYCLE / AUDIO_QUALITY` once per recording (at ENDED, or at TERMINATED_UNEXPECTEDLY from the last heartbeat) | Level sampled per audio packet / amplitude sample | `silent_seconds`, `peak_dbfs`, `avg_dbfs`, `clipped_pct`, `input_device`. Raw numbers only: the outcome job sets the flags (§6.4). | | 🆕 | ❌ Nothing tells a silent mic from a quiet room until the backend says `no_speech` |
 | Paused | `SCRIBE_JOURNEY / PARALLEL_RECORDING_PAUSED` | Every call to `pauseParallelRecording()` (§5.2.3) | **`reason`** (added) + existing recording_length, amplitude stats | | ➕ | 🟡 Same event for every pause; no reason |
 | Resumed | `ATTEMPTED{on_resume}` → `MIC_LIVE{on_resume}` | Resume re-runs `start()` | | | 🆕 (covered by the two above) | 🟡 `RESOURCE_MONITORING / PARALLEL_RECORDING_RESUMED`; resume also re-sends `PARALLEL_RECORDING_STARTED` |
 | Background / foreground | `APP_LIFECYCLE / BACKGROUND_RECORDING`, `FOREGROUND_RECORDING`; web `WEB_LIFECYCLE / TAB_FROZEN`, `TAB_UNFROZEN` | Visibility changes while recording | | | ✅ | ✅ |
@@ -273,7 +274,9 @@ With the entry, the cache health ping and `install_id`, the classifier can split
 |---|---|---|
 | **Vanished on device** | The install came back (events with a later `app_session_id`), but the recording is neither in the cache health list nor terminated | A real app bug: the recording disappeared from local storage. Highest priority. |
 | **Device not seen since** | No events from the install after the recording's last event, by the horizon | The provider hasn't reopened the app; the audio may still be on the device |
-| **Telemetry gap** | Sequence gap (`recording_seq` missing numbers) or `EVENTS_DROPPED` from the session | We lost the events, not necessarily the recording |
+| **Telemetry gap** | `EVENTS_DROPPED` from the session | We lost the events, not necessarily the recording |
+
+Safety check (daily job): the share of "lost" recordings (vanished / not seen since) that have a later event from the same `install_id`. If it is high, per-recording sequence numbers are added back to detect gaps.
 
 ### 5.5 Telemetry health events
 
@@ -366,7 +369,7 @@ A recording that was killed, stuck or failed and **later handed off** gets its b
 
 ### 6.4 Flags per recording (not exclusive)
 
-`ever_paused`, `ever_auto_paused`, `ever_interrupted` (+ source), `ever_resume_failed`, `partial_submit`, `ever_persist_error` (+ step), `ever_backgrounded`, `ever_upload_failed` (+ attempt count), `ever_killed`, `recovered_after_kill`, `recovered_after_stuck`, `crashed_during` (+ crash ids), `memory_pressure`, `audio_discrepancy` (client length − server length > 10 s), `duplicate_scribe`, `late_resolution`, `clock_skew` (client_ts vs received_at > 5 min), `telemetry_gap`.
+`ever_paused`, `ever_auto_paused`, `ever_interrupted` (+ source), `ever_resume_failed`, `partial_submit`, `ever_persist_error` (+ step), `ever_backgrounded`, `ever_upload_failed` (+ attempt count), `ever_killed`, `recovered_after_kill`, `recovered_after_stuck`, `crashed_during` (+ crash ids), `memory_pressure`, `audio_discrepancy` (client length − server length > 10 s), `duplicate_scribe`, `late_resolution`, `clock_skew` (client_ts vs received_at > 5 min), `telemetry_gap`, `ever_mic_lost` (any `MIC_LOST`), `mic_silent` (`silent_seconds` above threshold, e.g. ≥ 30 s, or peak level below the floor), `low_input` (average level below the floor), `clipped` (`clipped_pct` above threshold). Thresholds live in the job, so they change without an app release. `mic_silent` splits "incomplete: no speech" (outcome 5) into a mic problem vs. nobody talking.
 
 ### 6.5 Today's OKR metrics as filters over `recording_outcome`
 
@@ -469,7 +472,7 @@ All per-recording and per-session tables live in **StarRocks**. Grafana reads th
 | Every outcome has non-null `outcome_evidence` | Unexplained classifications |
 | Every `SCRIBE_CREATED` has a scribe row with the same uuid and `scribe_id` within 1 h | Identity breaks between app and backend |
 | No `recording_id` with more than 1 terminal client event | Contract violations |
-| Contract recordings with gaps in `recording_seq` < 0.5% | Event loss |
+| Recordings with an `EVENTS_DROPPED` from their session < 0.5%; lost recordings with a later event from the same `install_id` stays low | Event loss |
 | Crashes with `recording_phase ≠ idle` and null `recording_id` ≈ 0 | Code paths that skip the setter |
 | Crash `recording_id`s that exist in `recording_outcome` ≈ 100% | Id mismatch (e.g. today's `scribe_audio_legacy_*` fallback) |
 

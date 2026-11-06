@@ -510,7 +510,7 @@ One row per piece of work (agreed 11/5); the same list is in the overview HTML, 
 
 | # | Task | Gaps | Owner | Phase | Ticket | Done when |
 |---|---|---|---|---|---|---|
-| T19 | Add app_session_id and install_id to every event; recording_seq to lifecycle events | — | Recorder eng | P0 | — | Every event has both ids; gaps in recording_seq are measurable |
+| T19 | Add app_session_id and install_id to every event (no recording_seq, dropped 11/6) | — | Recorder eng | P0 | — | Every event has both ids; the install_id check separates "lost" from "not seen since" |
 | T20 | Put recording id, phase and chunk index on Crashlytics and Sentry (Sentry watchdog kills carry them) | G8 | Recorder eng | P0 | AFEP-3003 | A watchdog kill links to the recording it interrupted |
 | T21 | Remove patient names and emails from event payloads | G15 | Recorder eng | P0 | — | No patient_name / patient_email in scribe_events |
 | T22 | Telemetry health: EVENTS_DROPPED, queue stats; web sendBeacon | — | Recorder eng | P1 | — | Dropped events are counted |

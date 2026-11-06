@@ -19,7 +19,7 @@
 | Funnel unit | The recording: `recording_id` as a Mixpanel group key; distinct_id = account |
 | Outcomes | A daily job in StarRocks classifies each recording and sends one `RECORDING_OUTCOME` event |
 | Duplicates | `client_event_id` → Mixpanel `$insert_id`; the phone's `timestamp` is the event time |
-| Grafana | Everything except the funnel chart: recording list, timeline, ops dashboards, alerts |
+| Grafana | Everything except the funnel chart: one ops dashboard (stage panels, flags, crashes) with a drill-down table of recording ids. Timeline and alerts are deferred. |
 | Warehouse | StarRocks (scribe_events already lands there via the same topic) |
 | App's own Mixpanel events | Not part of the funnel; they stay for product analytics |
 | Scope | All paths at once: mobile chunking, mobile single-file, web app, Chrome extension |
@@ -40,7 +40,7 @@ flowchart LR
   SR --> JOB["NEW: daily outcome job<br/>48 h horizon"]
   JOB --> RO[("StarRocks<br/>recording_outcome")]
   JOB -->|"RECORDING_OUTCOME<br/>one per recording"| MP
-  SR --> GF["Grafana<br/>recording list, timeline,<br/>ops panels, alerts"]
+  SR --> GF["Grafana<br/>ops dashboard +<br/>drill-down table"]
   RO --> GF
 ```
 
@@ -502,13 +502,48 @@ sequenceDiagram
 
 ## 6. Grafana (StarRocks)
 
-| View | Source | Notes |
-|---|---|---|
-| Recording list | `recording_outcome` | Filter by week, platform, version, account, outcome, flag. Link to the timeline. |
-| Recording timeline | `scribe_events` by `uuid` + time window, plus the `scribe` row and crash rows | Filter on `uuid` and `created_at` first. Never filter on payload: payload parsing is what timed out in Retool on 11/3. |
-| Ops panels | `recording_outcome` daily | Reliability, start failures, kills per 1k, upload stuck, lost |
-| Alerts | same | Slack, linking to the recording list for that day and outcome |
-| Crash band | `crash_events` (T32) joined to `recording_outcome` | Recordings lost per crash issue |
+Grafana is **one ops dashboard**, read from `recording_outcome` (filled by the daily job). Mixpanel keeps the funnel; Grafana shows the daily health of each stage.
+
+**Common to every panel**
+- **Filters:** date range, platform, app version, account.
+- **Numbers:** a percentage with the raw count, e.g. "0.4% (12 / 3,100)". No "per 1,000".
+- **Provisional days:** the last 2 days are shaded, because an outcome needs 48 h to settle.
+- **Stage panels** are one stacked-bar template (one bar per day, one segment per outcome) repeated for each stage. The query is the same; only the outcome list changes:
+  ```sql
+  SELECT date(attempted_at) AS day, outcome_name, COUNT(*) AS n
+  FROM recording_outcome
+  WHERE attempted_at >= $from AND outcome IN ($stage_outcomes)
+    AND platform IN ($platform) AND app_version IN ($version)
+  GROUP BY day, outcome_name
+  ```
+- **Click-through:** clicking a bar segment, or a crash issue, filters the drill-down table at the bottom (below) to that day and outcome.
+
+**Panels**
+
+| # | Panel | Chart | Question it answers | Outcomes / fields | Rate (denominator) |
+|---|---|---|---|---|---|
+| 1 | Top line: reliability | Line | Of all recordings, how many became a note the provider got, and is it getting better? | 1 delivered + 2 note ready | (1 + 2) ÷ (all − 8 − 16) |
+| 2 | Top line: telemetry gap | Line, beside #1 | How much can I trust the reliability number? | 16 telemetry gap | 16 ÷ all |
+| 3 | Start | Stacked bar | How many attempts never started, and why? | 9 start failed; 8 blocked, split by reason | each ÷ all |
+| 4 | Record | Stacked bar | What went wrong while recording? | 10 recording failed; 14 killed, never handed off; 12 paused, never resumed | each ÷ all |
+| 5 | End and upload | Stacked bar | Which recordings ended but were never handed to the backend? | 11 upload stuck; 13 abandoned; 15 open at horizon | each ÷ all |
+| 6 | Backend | Stacked bar | What happened after the scribe was created? Did the provider get a usable note? | 2 ready not delivered; 3 delivery failed; 4 and 5 incomplete (5 split by `mic_silent`); 6 backend failed; 7 backend stuck | each ÷ all |
+| 7 | Lost | Stacked bar | How many recordings vanished without a trace, and which kind? | 17 vanished on device; 18 device not seen since | each ÷ all |
+| 8 | Flags | Line, several series | Where is trouble happening even when the recording was later saved? Are mic problems rising? | `mic_silent`, `ever_mic_lost`, `ever_killed`, `recovered_after_kill`, `recovered_after_stuck` | each ÷ all |
+| 9 | Crashes | Bar | Which crashes cost us recordings? | per crash issue (`crash_events`, T32 joined to `recording_outcome`): sessions affected, recordings affected, recordings lost | ranked by recordings lost, not crash count |
+
+Outcomes 1–18 each appear in exactly one panel, except 1 (delivered), which is only the numerator of panel 1. Panel 9 needs crashes tagged with `recording_id` and `app_session_id` (T20, T32), so it waits on that work.
+
+**Drill-down table** (under the panels): one row per recording from `recording_outcome` for the clicked day and outcome, or crash issue.
+- Columns: `recording_id`, attempted time, platform, app version, account, outcome, flags.
+- Source: `recording_outcome` only. No join to `scribe_events`.
+- Answers "show me the recordings that ended as 'device not seen since' on this day".
+
+**Deferred (not in this phase):**
+- a per-recording timeline;
+- Slack alerts on these numbers.
+
+Until the timeline exists, `outcome_evidence` on each row is the only per-recording explanation. When the timeline is built, filter `scribe_events` by `uuid` and `created_at` first, never on payload (payload parsing is what timed out in Retool on 11/3).
 
 ---
 
@@ -535,7 +570,7 @@ sequenceDiagram
 - [ ] One funnel with breakdowns by outcome, flag, platform, version
 
 **Grafana**
-- [ ] Recording list, timeline, ops panels, alerts
+- [ ] Ops dashboard (stage panels, flags, crashes) + drill-down table of recording ids; timeline and alerts deferred
 
 ---
 
@@ -547,7 +582,7 @@ sequenceDiagram
 | T36 | Keep `client_event_id` (in payload) on every app event | Backend (TBD) | P0 |
 | T37 | Mixpanel approval (BAA / security), project, Group Analytics on `recording_id` | Arthur | P0 |
 | T38 | Daily outcome job in StarRocks → `recording_outcome` + `RECORDING_OUTCOME` events; includes the lost-with-later-event safety check | Arthur | P1 |
-| T39 | Grafana recording list, timeline, ops panels (replaces the Retool page) | Arthur | P0 |
+| T39 | Grafana ops dashboard (stage panels, flags, crashes) + drill-down table of recording ids (replaces the Retool page). Timeline and alerts deferred. | Arthur | P0 |
 | T40 | Client audio-level sampling (rolling on the heartbeat) + `AUDIO_QUALITY` at the end | App (TBD) | P0 |
 | T41 | `MIC_LOST` event (route change, headset disconnect, packets stop mid-recording) | App (TBD) | P0 |
 | T42 | Outcome job: derive mic flags (`mic_silent`, `low_input`, `clipped`, `ever_mic_lost`) and write outcome + flags to the `recording_id` group profile | Arthur | P1 |
@@ -560,7 +595,7 @@ sequenceDiagram
 3. **Volume:** about 365k attempts a week × ~8 forwarded events, roughly 3M events a week. Check against the Mixpanel plan.
 4. **Pub/Sub flag:** is `is_publish_scribe_event_enabled` on in production for all platforms?
 5. **Grafana on StarRocks:** confirm the data source and access (Tailscale for viewers).
-6. **Payload queries:** keep Grafana queries filtered on tag / uuid / time first. If timeline queries are still slow, revisit promoting a few fields to columns.
+6. **Payload queries:** applies when the timeline is built (deferred). Keep Grafana queries filtered on tag / uuid / time first. If timeline queries are still slow, revisit promoting a few fields to columns.
 7. **Group-profile breakdown:** confirm Mixpanel can break a funnel step down by a group profile property on the plan, and how long a profile update takes to show.
 8. **Volume:** `MIC_LOST` and `AUDIO_QUALITY` add about 1–2 events per recording (roughly +0.4–0.7M a week). Re-check item 3.
 9. **Privacy:** confirm audio level numbers and `input_device` are acceptable to send. No audio content is sent.

@@ -67,6 +67,26 @@ layout: null
   .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; }
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; }
+  .stage .badge { display: block; font-size: 11px; color: var(--muted); }
+  .stage .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--fail); margin-left: 4px; vertical-align: middle; }
+  .evscroll { max-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table.ev { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.ev th { position: sticky; top: 0; background: var(--card); text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.ev td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.ev td.seq, table.ev td.uu { color: var(--muted); white-space: nowrap; }
+  table.ev td.ta code { white-space: normal; word-break: break-word; }
+  table.ev tr.grp td { background: var(--card); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+  table.ev tr.silent td.ta { color: var(--fail); font-style: italic; }
+  table.ev .kf { color: var(--ink); }
+  table.ev .nt { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .src { display: inline-block; font-size: 11px; padding: 0 6px; margin: 0 4px 2px 0; border-radius: 4px; white-space: nowrap; border: 1px solid var(--line); color: var(--muted); }
+  .s-app { background: var(--accent-bg); color: var(--accent); border-color: transparent; }
+  .s-be { background: var(--gap-bg); color: var(--gap); border-color: transparent; }
+  .s-table { background: var(--kill-bg); color: var(--kill); border-color: transparent; }
+  .s-sentry { background: var(--lost-bg); color: var(--lost); border-color: transparent; }
+  .s-none { background: var(--fail-bg); color: var(--fail); border-color: transparent; }
+  .s-phi { background: var(--fail); color: var(--bg); border-color: transparent; }
+  ul.gaps { margin: 0; padding-left: 18px; } ul.gaps li { margin: 6px 0; } ul.gaps .nt { color: var(--ok); font-size: 13px; margin-top: 2px; }
 
   /* status pills */
   .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
@@ -133,11 +153,12 @@ layout: null
 <body>
 <nav><div class="wrap">
   <a href="#idea">The idea</a>
+  <a href="#questions">Questions</a>
   <a href="#journey">Journey</a>
   <a href="#outcomes">Outcomes &amp; metrics</a>
   <a href="#example">One recording</a>
   <a href="#crashes">Crashes</a>
-  <a href="#build">What we build</a>
+  <a href="#build">Tasks</a>
   <a href="#phases">Phases</a>
   <a href="#tools">Tools, owners &amp; questions</a>
 </div></nav>
@@ -161,6 +182,12 @@ layout: null
 </div>
 <p class="sub" style="margin-top:14px">To make this possible, the app and backend send a few new ids and events. We don't work around today's gaps; we close them.</p>
 
+
+<!-- ============ QUESTIONS ============ -->
+<h2 id="questions">Questions the funnel answers</h2>
+<p class="sub">Every view should answer one of these. Outcome numbers match the outcomes section below; tasks match the task list. Full notes: <code>docs/20261105-funnel-questions.md</code>.</p>
+<table class="ev qs"><tr><th>Question</th><th>Outcome</th><th>Answerable</th><th>Tasks</th></tr><tr class="grp"><td colspan="4">Top line</td></tr><tr><td>Of all recording attempts this week, how many became a note the provider got, and is it getting better?</td><td style="white-space:nowrap">1–2 ÷ (all − 8 − 16)</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T30</td></tr><tr class="grp"><td colspan="4">Phase 1: Start</td></tr><tr><td>How many attempts never started, and why? (pre-checks, user cancelled)</td><td style="white-space:nowrap">8</td><td><span class="pill p-new">needs logging</span></td><td style="white-space:nowrap;color:var(--muted)">T1, T2</td></tr><tr><td>How many failed to start or resume, and why?</td><td style="white-space:nowrap">9</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T5</td></tr><tr class="grp"><td colspan="4">Phase 2: Recording</td></tr><tr><td>How many failed mid-recording, and why?</td><td style="white-space:nowrap">10</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T5, T9</td></tr><tr><td>How many were killed unexpectedly, at which stage, and how many were recovered? Did the provider still get a complete note?</td><td style="white-space:nowrap">14 + flags</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T11, T12, T20</td></tr><tr><td>How many were paused and never resumed, by the user vs. auto-paused after a kill?</td><td style="white-space:nowrap">12 vs 14</td><td><span class="pill p-new">needs logging</span></td><td style="white-space:nowrap;color:var(--muted)">T6, T12</td></tr><tr><td>Was all the audio saved and uploaded?</td><td style="white-space:nowrap">flags</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T8, T17</td></tr><tr class="grp"><td colspan="4">Phase 3: End and upload</td></tr><tr><td>How many uploads failed or got stuck, at which step, and how many were recovered later?</td><td style="white-space:nowrap">11</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T16, T17</td></tr><tr class="grp"><td colspan="4">Lost</td></tr><tr><td>How many recordings are lost, and which kind? (vanished on device, device not seen since, telemetry gap)</td><td style="white-space:nowrap">17, 18, 16</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T11, T18, T19</td></tr><tr class="grp"><td colspan="4">Phase 4: Backend</td></tr><tr><td>How many are incomplete, and why? (no mic? hardware problem?)</td><td style="white-space:nowrap">4, 5</td><td><span class="pill p-yes">today</span></td><td style="white-space:nowrap;color:var(--muted)"></td></tr><tr><td>How many failed or got stuck in the backend?</td><td style="white-space:nowrap">6, 7</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T25–T28</td></tr><tr><td>How many notes were ready but never delivered or used?</td><td style="white-space:nowrap">2 vs 1</td><td><span class="pill p-part">partly</span></td><td style="white-space:nowrap;color:var(--muted)">T25, T28</td></tr><tr class="grp"><td colspan="4">Across all stages</td></tr><tr><td>Which crashes cost us recordings? Ranked by recordings lost, not crash count.</td><td style="white-space:nowrap">crash band</td><td><span class="pill p-new">needs logging</span></td><td style="white-space:nowrap;color:var(--muted)">T20, T32</td></tr><tr><td>Is it concentrated? Which platform, app version, account or site drives each number?</td><td style="white-space:nowrap">dimensions</td><td><span class="pill p-yes">today</span></td><td style="white-space:nowrap;color:var(--muted)"></td></tr></table>
+
 <!-- ============ JOURNEY ============ -->
 <h2 id="journey">The journey of a recording</h2>
 <p class="sub">Four phases (as agreed in the 11/2 meeting), ten stages underneath. Click a stage.</p>
@@ -169,7 +196,7 @@ layout: null
 <div class="lane"><span class="lane-label">3 · End</span><div id="lane-end" class="lane" style="margin:0"></div></div>
 <div class="lane"><span class="lane-label">4 · Backend</span><div id="lane-b" class="lane" style="margin:0"></div></div>
 <div class="card detail" id="stage-detail"></div>
-<p class="sub" style="margin-top:8px">Every event here is a row in <code>scribe_events</code>, shown as <code>tag / action</code>. Events under "After the change" are proposed and don't exist yet.</p>
+<p class="sub" style="margin-top:8px">Every event is a row in <code>scribe_events</code>, shown as <code>tag / action</code>. <b>uuid</b>: <i>rec</i> = the recording id, <i>random</i> = made up by the app (can't be joined), <i>scribe</i> = the scribe's uuid. <code>created_at</code> is when the server received the event, not when it happened. Read from code (scribe-mobile c87c9fe7a, normandy 030f82a7ca), not data. Full index with code locations: <code>docs/20261105-recording-journey-event-index.md</code>. Events under "After the change" are proposed and don't exist yet.</p>
 
 <!-- ============ OUTCOMES ============ -->
 <h2 id="outcomes">Outcomes and the metrics built on them</h2>
@@ -205,9 +232,8 @@ layout: null
 <p class="sub" style="margin-top:12px">The crash list ranks issues by <b>recordings lost</b>, then sessions affected. Every count opens the list behind it.</p>
 
 <!-- ============ BUILD ============ -->
-<h2 id="build">What we need to build</h2>
-<p class="sub">Each item checked against today's code.
-  <span class="pill p-yes">exists</span> <span class="pill p-part">partly</span> <span class="pill p-new">new</span></p>
+<h2 id="build">Tasks</h2>
+<p class="sub">One row per piece of work, agreed 11/5. Gap numbers (G1–G19) match the stage panels above and <code>docs/20261105-recording-journey-event-index.md</code>. Phases: P0 now, P1 once P0 builds are in the field, P2 depth.</p>
 <div id="build-list"></div>
 
 <!-- ============ PHASES ============ -->
@@ -216,7 +242,7 @@ layout: null
   <div class="card phase"><div class="big">P0 · Now</div><p>Instrument the app, start the funnel from today's data</p>
     <ul><li>App: new ids, lifecycle events, auto-pause, interruptions, open-recordings list, crash keys</li><li>Depends on: iOS permission check, typed errors, watchdog</li>
         <li>Backend: link event, status history, stop hard-deleting failures, stuck event</li>
-        <li>Retool page with recording list and timeline, using today's events</li></ul></div>
+        <li>Grafana recording list and timeline, using today's events</li></ul></div>
   <div class="card phase"><div class="big">P1 · Once P0 builds are out</div><p>Switch to the new events, add crashes and alerts</p>
     <ul><li>Classify recordings from the new events</li>
         <li>Per-crash table, own crash-free rate</li>
@@ -232,15 +258,15 @@ layout: null
 <!-- ============ TOOLS ============ -->
 <h2 id="tools">Tools, owners and open questions</h2>
 <div class="grid3">
-  <div class="card"><div class="big">Debugging (engineers)</div><p>Needs per-recording data and a lookup, not a dashboard. Retool list and timeline.</p></div>
-  <div class="card"><div class="big">Management funnel: pending</div><p>Pengyao wants a real drop-off funnel. Options: Retool (reads StarRocks), Grafana (no native funnel, needs Tailscale), Mixpanel (native funnel; can import from BigQuery; BAA to check).</p></div>
-  <div class="card"><div class="big">Alerts</div><p>Grafana, next to the existing crash dashboard. Alerts link to the recording list.</p></div>
+  <div class="card"><div class="big">Funnel chart: Mixpanel</div><p>Funnel events are forwarded from scribe_events by a Pub/Sub subscriber, one row per recording. Mixpanel approval (BAA) still to confirm.</p></div>
+  <div class="card"><div class="big">Everything else: Grafana</div><p>Tiles, outcomes, crash band, recording list, timeline and alerts, reading StarRocks directly.</p></div>
+  <div class="card"><div class="big">Warehouse: StarRocks</div><p>scribe_events already lands there; a daily job builds one outcome per recording and sends it to Mixpanel too.</p></div>
 </div>
-<p class="sub" style="margin-top:12px">The tables don't change with the tool. Plan: build them first, show Pengyao the funnel, then decide.</p>
+<p class="sub" style="margin-top:12px">Decided 11/5. Design with sequence diagrams: <code>docs/20261105-funnel-logging-design.md</code>.</p>
 <div class="grid3" style="margin-top:14px">
-  <div class="card"><div class="big">Arthur</div><p>Visualization, data model, tool decision; crash metadata with Prokash.</p></div>
+  <div class="card"><div class="big">Arthur</div><p>Data model, outcome job, Grafana views, Mixpanel setup; crash metadata with Prokash.</p></div>
   <div class="card"><div class="big">Recorder engineer</div><p>App logging gaps, plus a doc of what's captured and how to read it.</p></div>
-  <div class="card"><div class="big">Bhanu</div><p>Periodic watchdog events, which the open-recordings check builds on.</p></div>
+  <div class="card"><div class="big">Bhanu</div><p>Periodic watchdog events, which can refresh the open-recording entry.</p></div>
 </div>
 <div class="card" style="margin-top:14px">
   <div class="big" style="margin-bottom:8px">Open questions</div>
@@ -261,55 +287,307 @@ layout: null
 <script>
 const STAGES = [
   { id: "C0", lane: "start", name: "Attempted", plain: "Provider tapped record (or resume). Pre-checks run: permission, mic, storage, memory.",
-    today: ["part", "Seen only after pre-checks pass, so blocked attempts are invisible: <code>SCRIBE_JOURNEY / PARALLEL_RECORDING_STARTED</code>, <code>SCRIBE_AUDIO_CACHE_SYNC_V2 / AUDIO_CACHE_START</code>. iOS doesn't explicitly check mic permission first (Android does)."],
-    after: "<code>RECORDING_LIFECYCLE / ATTEMPTED</code> (recording id created here) or <code>RECORDING_LIFECYCLE / PREFLIGHT_BLOCKED</code> with a reason. Same checks on resume.",
+    today: ["part", "Only one blocked start is logged (low battery / storage). <code>RESOURCE_MONITORING / RECORDING_INITIATED</code> fires after the first check, with a random uuid, and repeats every 30 s. The recording id first appears on <code>SCRIBE_JOURNEY / RECORDING_INITIALIZED</code>."],
+    after: "<span class=\"pill p-new\">new</span> <code>RECORDING_LIFECYCLE / ATTEMPTED</code> at the top of the start flow, after the double-tap lock and <b>before</b> the active-recording check (0.1): once per tap. The <b>recording id is created here</b> and goes on every C0 event.<br><span class=\"pill p-new\">new</span> <code>RECORDING_LIFECYCLE / PREFLIGHT_BLOCKED{reason}</code>: one per blocked exit (active_recording, unsupported_browser, duplicate_tab, low_battery / low_storage, permission_denied, paywall, no_template, user_cancelled), from one switch at the end of the start flow.<br><span class=\"pill p-part\">add field</span> <code>RESOURCE_MONITORING / RECORDING_INITIATED</code> sent <b>once</b>, with the recording id (no 30 s repeat).<br><span class=\"pill p-new\">new</span> An \"open recording\" entry is saved on the phone at the tap (<code>phase = preflight</code>), so a kill from here on is detected at the next launch. Resume: <code>ATTEMPTED{on_resume}</code> with the existing id.",
     ends: ["Expected exit (permission denied, cancelled…)"] },
   { id: "C1", lane: "start", name: "Mic live", plain: "The microphone is actually producing audio.",
-    today: ["part", "First <code>RESOURCE_MONITORING / RECORDING_IN_PROGRESS</code>. Start errors: <code>SCRIBE_JOURNEY / START_RECORDING_ERROR</code>, free-form strings that differ per platform."],
-    after: "<code>RECORDING_LIFECYCLE / MIC_LIVE</code>, or <code>RECORDING_LIFECYCLE / START_FAILED</code> with a typed error code (also on resume).",
+    today: ["part", "<code>SCRIBE_JOURNEY / PARALLEL_RECORDING_STARTED</code> is sent before the mic starts; the first <code>RESOURCE_MONITORING / RECORDING_IN_PROGRESS</code> is the first sign it's running. Start errors are free-form."],
+    after: "<span class=\"pill p-new\">new</span> <code>RECORDING_LIFECYCLE / MIC_LIVE</code> on the <b>first audio packet</b>, not when the mic call returns (non-chunking: first sound-level reading).<br><span class=\"pill p-new\">new</span> <code>RECORDING_LIFECYCLE / START_FAILED{error_code}</code> from one sender, at most once per attempt: mic won't start, recorder error before the first packet, any start exception, or <b>no audio within 5 s</b>. Old <code>SCRIBE_FAILED / ON_START</code> and <code>START_RECORDING_ERROR</code> stay for old dashboards. Also on resume.",
     ends: ["Start failed (incl. resume failed)"] },
   { id: "C2", lane: "rec", name: "Recording & saving", plain: "Audio saved locally (encrypted); on the chunking path, chunks upload in parallel. Pauses, interruptions and kills happen here.",
-    today: ["part", "<code>SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_ADDED</code> (chunking) / <code>SCRIBE_AUDIO_CACHE_SYNC_V2 / FILE_ADDED</code> (non-chunking); <code>SCRIBE_JOURNEY / PARALLEL_RECORDING_PAUSED</code>, <code>SCRIBE_JOURNEY / MID_RECORDING_ERROR</code>; <code>APP_LIFECYCLE / APP_KILLED_DETECTED</code> on the next launch. Interruptions go to Sentry only. A killed recording comes back as plain \"paused\"."],
-    after: "<code>RECORDING_LIFECYCLE / AUDIO_PERSISTED</code>, <code>RECORDING_LIFECYCLE / PERSIST_ERROR</code> (SQLite / file / encrypt / decrypt), <code>RECORDING_LIFECYCLE / INTERRUPTED</code>, <code>RECORDING_LIFECYCLE / PAUSED</code> with reason <i>user</i> vs <i>auto after unexpected exit</i>, and <code>RECORDING_LIFECYCLE / TERMINATED_UNEXPECTEDLY</code> on the next launch.",
+    today: ["part", "<code>SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_ADDED</code> every 30 s (first proof of audio), uploads, pauses with no reason, <code>APP_LIFECYCLE / APP_KILLED_DETECTED</code> on the next launch. Interruptions aren't logged (only the end of an iOS one). A killed recording comes back as plain \"paused\"."],
+    after: "<span class=\"pill p-part\">add field</span> Audio saved = the <b>first</b> <code>SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_ADDED</code>, with <code>chunk_index</code> and <code>bytes</code> added (new signal only for non-chunking and web non-chunking).<br><span class=\"pill p-part\">add field</span> <code>SCRIBE_JOURNEY / PARALLEL_RECORDING_PAUSED</code> gets a <code>reason</code> from all 9 callers: user, user_pip, user_tour, no_audio_auto, phone_call, interruption, device_change, ending, new_visit.<br><span class=\"pill p-new\">new</span> <code>RECORDING_LIFECYCLE / INTERRUPTED{source}</code> + <code>INTERRUPTION_ENDED</code>, only when the OS says the mic was taken (call, iOS interruption, route change). The no-audio auto-pause is a pause, not an interruption.<br><span class=\"pill p-new\">new</span> <code>RECORDING_LIFECYCLE / PERSIST_ERROR</code> for file / encrypt / decrypt failures (database failures already have events).<br><span class=\"pill p-new\">new</span> <b>A kill can't be logged when it happens.</b> At the next launch: <code>RECORDING_LIFECYCLE / TERMINATED_UNEXPECTEDLY{last_phase, last_seen_at, restored_as: auto_paused}</code>, and the cache gets a new <code>auto_paused</code> state instead of plain \"paused\". A kill while already paused stays a user pause.",
     ends: ["Recording failed", "Paused by user, never resumed", "Killed unexpectedly"] },
   { id: "C3", lane: "end", name: "Ended", plain: "Recording stopped.",
     today: ["part", "<code>SCRIBE_JOURNEY / PARALLEL_RECORDING_ENDED</code>."],
-    after: "<code>RECORDING_LIFECYCLE / ENDED</code> with the reason.",
+    after: "<span class=\"pill p-part\">add field</span> <code>SCRIBE_JOURNEY / PARALLEL_RECORDING_ENDED</code> gets a <code>reason</code> (user / auto_stop / max_length / too_short / discarded), and fires on <b>every</b> ending (today too-short recordings skip it). The pause sent just before a stop is tagged <code>reason: ending</code>.",
     ends: ["Discarded (too short, deleted)", "Abandoned", "Lost"] },
   { id: "C4a", lane: "end", name: "All audio uploaded", plain: "Wait ~15 s for in-flight uploads, retry each pending chunk up to 3×, upload the manifest.",
-    today: ["yes", "Chunking only: <code>SCRIBE_CHUNKING / FINALIZE_SUCCESS</code> / <code>_PARTIAL</code> / <code>_FAILED</code> / <code>_TIMEOUT</code>, <code>SCRIBE_CHUNKING / MANIFEST_FAILED</code>. Non-chunking has none."],
-    after: "Keep the <code>SCRIBE_CHUNKING / FINALIZE_*</code> events and add the recording id. Non-chunking: <code>RECORDING_LIFECYCLE / UPLOAD_ATTEMPT</code> / <code>RECORDING_LIFECYCLE / UPLOAD_FAILED</code>.",
+    today: ["yes", "Chunking: <code>SCRIBE_CHUNKING / FINALIZE_SUCCESS / _PARTIAL / _FAILED / _TIMEOUT / _SKIPPED</code>, <code>MANIFEST_FAILED</code>, <code>TRIGGER_FAILED</code>. Non-chunking: only <code>SCRIBE_UPLOAD_ERROR</code> on failure."],
+    after: "<span class=\"pill p-yes\">existing, more paths</span> Keep the <code>SCRIBE_CHUNKING / FINALIZE_*</code> events. <span class=\"pill p-new\">new</span> An event when a cache moves to error, with the reason (offline / partial / missing chunks), so stuck uploads aren't only visible in the 30-minute health check.",
     ends: ["Upload stuck"] },
   { id: "C4b", lane: "end", name: "Handed off", plain: "Backend workflow triggered and a scribe returned.",
-    today: ["part", "<code>SCRIBE_CHUNKING / SCRIBE_CREATED</code> on chunking; otherwise guessed from the scribe row. A partial-submit path exists (some chunks failed)."],
-    after: "<code>RECORDING_LIFECYCLE / HANDED_OFF</code> from the app plus <code>SCRIBE_LIFECYCLE / LINKED</code> from the backend; partial submits flagged.",
+    today: ["part", "<code>SCRIBE_CHUNKING / SCRIBE_CREATED</code> (with scribe_id) on chunking. Non-chunking sends nothing; the link comes from the scribe row's uuid."],
+    after: "<span class=\"pill p-yes\">existing, more paths</span> <code>SCRIBE_CHUNKING / SCRIBE_CREATED</code> is the hand-off. Send it from <b>every</b> path that creates a scribe: chunking (today), single-file uploads, the background retry and the recovery pop-up (with the recording id). <code>HANDED_OFF</code> and <code>LINKED</code> are <b>dropped</b>: the link is already in <code>scribe.uuid</code> and the backend events. Partial submits are already flagged.",
     ends: [] },
   { id: "B1", lane: "b", name: "Audio received", plain: "Backend has all the audio.",
-    today: ["part", "No event: the scribe row exists (some <code>NORMANDY_WORKFLOWS_*</code> events). Failed combines are hard-deleted and look lost."],
+    today: ["part", "<code>SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_*</code> events from the backend. A failed audio combine hard-deletes the scribe with no event, so it looks lost."],
     after: "<code>SCRIBE_LIFECYCLE / AUDIO_RECEIVED</code>; failures soft-deleted with <code>SCRIBE_FAILED</code> and a reason.",
     ends: ["Backend failed", "Backend stuck"] },
   { id: "B2", lane: "b", name: "Transcribed", plain: "Speech turned into text.",
-    today: ["part", "No event: <code>audio_length_in_seconds</code> is set on the scribe row."],
+    today: ["part", "<code>SCRIBE_JOURNEY / TRANSCRIPTION_CALLBACK_*</code> and <code>NORMANDY_WORKFLOWS_TRANSCRIPTIONS_AND_OCRS_COMPLETED</code>; <code>audio_length_in_seconds</code> set. Transcription failure has no event."],
     after: "<code>SCRIBE_LIFECYCLE / TRANSCRIPTION_DONE</code> / <code>_FAILED</code>.",
     ends: ["Incomplete: no speech"] },
   { id: "B3", lane: "b", name: "Note ready", plain: "The note was generated.",
-    today: ["part", "No event: inferred from <code>task_status</code> on the scribe row, which gets overwritten."],
+    today: ["part", "<code>SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_ALL_TASKS_COMPLETED</code> (can repeat); otherwise inferred from <code>task_status</code>, which gets overwritten."],
     after: "<code>SCRIBE_LIFECYCLE / NOTE_READY</code> / <code>NOTE_INCOMPLETE</code>, plus <code>SCRIBE_LIFECYCLE / STATUS_CHANGED</code> on every status change and a status history table.",
     ends: ["Incomplete: not enough info", "Note ready, not delivered (counts as success)"] },
   { id: "B4", lane: "b", name: "Delivered", plain: "Note reached the EHR, or the provider copied it.",
-    today: ["part", "<code>task_status</code> SYNCED / COPIED on the scribe row; tag <code>NOTE_COPIED</code> (no action)."],
+    today: ["part", "<code>task_status</code> SYNCED / SYNC_ERROR / COPIED only, no event. App events: <code>EHR_SYNC_PRESSED</code>, <code>EHR_SYNC_FAILED</code>, <code>NOTE_COPIED</code>."],
     after: "<code>SCRIBE_LIFECYCLE / DELIVERY_SUCCEEDED</code> / <code>_FAILED</code>; <code>RECORDING_LIFECYCLE / NOTE_VIEWED</code> from the app.",
     ends: ["Delivered (success)", "Delivery failed"] },
 ];
 const PILL = { yes: ["p-yes", "exists"], part: ["p-part", "partly"], new: ["p-new", "new"] };
 const pill = s => `<span class="pill ${PILL[s][0]}">${PILL[s][1]}</span>`;
 
+// Events today, per stage, from docs/20261105-recording-journey-event-index.md (scribe-mobile c87c9fe7a, normandy 030f82a7ca).
+// Row: [seq, source, tag / action, uuid, key fields, note, phi]. A {g: "..."} entry starts a sub-group.
+const EVENTS = {
+  C0: { today: [
+    ["0.1", "none", "Another recording already open", "", "", "Snackbar, stop"],
+    ["0.2", "app", "RESOURCE_MONITORING / RECORDING_INITIATED", "random", "memory_info, disk_space_info", "Repeats every 30 s; nothing stops it on a blocked start"],
+    ["0.3", "none", "Duplicate tab (web)", "", "", "Dialog, stop"],
+    ["0.4", "app", "LOW_WARNING_DIALOG_SHOWN (no action)", "random", "is_low_battery, is_low_storage, proceeded_anyway", "Only when battery &lt; 10% or storage &lt; 500 MB; max once a day; not on web"],
+    ["0.5", "none", "Mic permission denied", "", "", "Settings dialog, stop. iOS does request permission."],
+    ["0.6", "none", "Rate limit → paywall", "", "", "Stop"],
+    ["0.7", "none", "No template chosen", "", "", "Snackbar, stop"],
+    ["0.8", "app", "SCRIBE_CHUNKING / RECORDING_MODE_SELECTED", "random", "mode_selected, reason, patch_version", ""],
+    ["0.9", "app", "SCRIBE_JOURNEY / RECORDING_INITIALIZED", "rec", "template_id", "First event with the recording id", true],
+    ["0.10", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / AUDIO_CACHE_START", "rec", "scribeCache {state = paused}, fileParts", "Means “cache row created”; also re-fires when the row exists"],
+    ["0.11", "app", "SCRIBE_FEATURE_OPTION_SYNC / FEATURE_OPTION_INSERTED", "rec", "optionName, optionValueAsString", "Carry-forward, age, gender"],
+    ["—", "app", "SCRIBE_FAILED / ON_START", "rec", "failure_reason, stack_trace", "Any start exception (also Sentry). User sees “Couldn't start recording”, which logs nothing.", true],
+  ], mixpanel: [
+    ["start_recording_tapped", "none", "Button tap; no recording id"],
+    ["start_recording_split_menu_tapped, start_recording_smart_update_selected", "none", "Inpatient"],
+    ["new_scribe_button_tapped (+ other entry points)", "none", ""],
+    ["snackbar_shown", "message, type", "“A recording is in progress…”, “Couldn't start recording”"],
+  ], gaps: ["G1", "G2", "G3", "G5"],
+  native: "Native: uuid is <code>scribe_audio_workflows_…</code>; <code>CARRY_FORWARD_PREFERENCE</code> always fires; <code>FILE_ADDED</code> fires before the mic starts." },
+
+  C1: { today: [
+    ["1.1", "app", "SCRIBE_JOURNEY / PARALLEL_RECORDING_STARTED", "rec", "template_id", "Sent <b>before</b> the mic starts; re-sent on every resume", true],
+    ["1.2", "app", "SCRIBE_MONITORING / PRIOR_RECORDING_START", "rec", "device diagnostics, app_version", "Re-sent on resume"],
+    ["1.3", "sentry", "Mic fails to start → Sentry, then SCRIBE_FAILED / ON_START", "rec", "effectiveDeviceId, triedDeviceIds", "One attempt on mobile; web tries each device"],
+    ["1.4", "none", "Cache paused → started; recording id saved for kill detection", "", "", "No event. A kill before this point is never detected."],
+    ["1.5", "app", "RESOURCE_MONITORING / RECORDING_IN_PROGRESS", "rec", "memory_info, disk_space_info", "Then every 30 s. <b>First reliable sign the mic is running.</b>"],
+    ["—", "app", "SCRIBE_JOURNEY / START_RECORDING_ERROR", "rec", "error (hard-coded text), stack_trace (always null)", "Only for a recorder error within 5 s; other early errors are logged as MID_RECORDING_ERROR"],
+  ], mixpanel: [
+    ["chunking_recording_started / native_recording_started", "uuid, duration_seconds, template_id, recording_mode, device_id (audio input)", "Can be missed if the screen opens during initializing"],
+    ["patient_consent_checkbox_toggled, telehealth_wearing_headphones_checkbox_toggled", "none", ""],
+  ], gaps: ["G4", "G5", "G17"] },
+
+  C2: { today: [
+    {g: "While recording"},
+    ["2.1", "app", "RESOURCE_MONITORING / RECORDING_IN_PROGRESS", "rec", "memory, disk", "Every 30 s; stops on pause"],
+    ["2.2", "app", "SCRIBE_MONITORING / DURING_RECORDING", "rec", "diagnostics_&lt;platform&gt;", "Every 5 min"],
+    ["2.3", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_ADDED", "rec", "filePartId only", "Per chunk (30 s). <b>First proof audio was saved.</b>"],
+    ["2.4", "app", "SCRIBE_CHUNKING / FLUSHED", "rec", "chunk_index, bytes, packet_count, is_final", "Per chunk"],
+    ["2.5", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_UPLOADED", "rec", "filePartId, chunkFilename", "Per chunk, async (upload success)"],
+    ["2.6", "app", "SCRIBE_CHUNKING / FLUSH_EMPTY", "rec", "reason, chunk_index", "Per empty flush"],
+    ["2.7", "app", "SCRIBE_CHUNKING / CONSECUTIVE_FLUSH_EMPTIES", "rec", "consecutive_count, elapsed_seconds, tab_inactive", "3rd empty in a row; triggers the no-audio auto-pause"],
+    ["2.8", "app", "SCRIBE_CHUNKING / FLUSH_DEFERRED", "rec", "reason, tab_inactive, tab_frozen", ""],
+    {g: "Upload problems"},
+    ["2.9", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_UPLOAD_RETRY_BACKOFF", "none", "retryCount, delayMs", "No recording id"],
+    ["2.10", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_UPLOAD_FAILED", "rec", "filePartId, error", "Skipped for auth and offline failures"],
+    ["2.11", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_UPLOAD_SHED", "rec", "outstanding", "Upload pool full"],
+    ["2.12", "app", "FILE_PART_INSERT_FAILED, AUDIO_CACHE_UPDATE_FAILED", "rec", "error, attempts", "Local database failure"],
+    {g: "Pause, resume and interruptions"},
+    ["2.13", "app", "RESOURCE_MONITORING / PARALLEL_RECORDING_PAUSED → SCRIBE_JOURNEY / PARALLEL_RECORDING_PAUSED → SCRIBE_AUDIO_CACHE_SYNC_V2 / AUDIO_CACHE_PAUSED", "rec", "recording_length, amplitude stats", "<b>No reason field:</b> user, auto, call and interruption pauses look the same"],
+    ["2.14", "app", "RESOURCE_MONITORING / PARALLEL_RECORDING_RESUMED", "rec", "", "Then 1.1, 1.2 and 1.5 fire again"],
+    ["2.15", "none", "No-audio auto-pause", "", "", "No own event: 2.7 then 2.13"],
+    ["2.16", "none", "Android phone call", "", "", "No own event: looks like 2.13"],
+    ["2.17", "app", "SCRIBE_JOURNEY / PHONE_CALL_&lt;type&gt;", "rec", "", "iOS interruption <i>end</i> only; the start isn't logged (local log only)"],
+    ["2.18", "app", "SCRIBE_JOURNEY / MIC_INPUT_CHANGE", "rec", "device_id", "Plus MIC_CHANGE_RESCHEDULE* edge cases"],
+    {g: "Warnings and errors"},
+    ["2.20", "app", "SCRIBE_JOURNEY / LOW_AUDIO_DETECTED", "rec?", "volume_threshold", "Uses the first cache's id, which may not be this recording"],
+    ["2.21", "app", "SCRIBE_JOURNEY / MUTED_RECORDING", "rec", "error", ""],
+    ["2.22", "app", "IOS_LOW_MEMORY_WARNING / MEMORY_PRESSURE", "none", "sequence, memory, trigger", "iOS; also Sentry SCRIBE-MOBILE-QD6"],
+    ["2.23", "app", "SCRIBE_JOURNEY / LOW_MEMORY_DURING_RECORDING", "rec", "session_id, phys_footprint_mb, device_free_ram_mb", "Only if recording when 2.22 fires", true],
+    ["2.24", "app", "APP_LIFECYCLE / BACKGROUND_RECORDING, FOREGROUND_RECORDING, DETACHED_APP", "rec", "platform, timestamp", "Per lifecycle change while recording"],
+    ["2.25", "app", "SCRIBE_JOURNEY / MID_RECORDING_ERROR", "rec", "error, stack_trace", "“Disconnected microphone” dialog"],
+    ["2.27", "app", "SCRIBE_FAILED (no action)", "rec", "recording_length, failure_reason", "Auto-stop at 3 h failed", true],
+    {g: "After a kill (next launch)"},
+    ["K.1", "app", "APP_LIFECYCLE / APP_KILLED_DETECTED", "rec", "last_app_state, last_active_timestamp, time_since_last_active_minutes, last_session_id, current_session_id", "Sent on the next launch; can repeat. Times are the last lifecycle change, not the kill. No exit reason."],
+    ["K.2", "app", "APP_LIFECYCLE / DURATION_NORMALIZED_AFTER_KILL", "rec", "previous/normalized_duration_seconds", "Never fires for chunking"],
+    ["K.3", "app", "APP_LIFECYCLE / ORPHANED_AUDIO_FILE_RECOVERED", "rec", "filename, file_size_bytes", "Native only"],
+    ["—", "none", "Cache started → paused on launch", "", "", "No event when it succeeds"],
+  ], mixpanel: [
+    ["pause_recording_tapped, minimized_pause_tapped, pip_pause_action", "source (pip)", ""],
+    ["chunking_recording_paused / native_recording_paused", "uuid + recording fields", ""],
+    ["resume_recording_tapped, resume_visit_tapped, minimized_resume_tapped, pip_resume_action", "source", "resume_recording_tapped is also used in the short-recording dialog"],
+    ["chunking_recording_resumed / native_recording_resumed", "uuid + recording fields", ""],
+    ["back_to_visits_tapped, start_another_visit_tapped", "none", "Leaves the recording paused"],
+    ["toast_shown", "title, message, type", "Low-audio warning"],
+  ], gaps: ["G6", "G7", "G8", "G9", "G18", "G15"],
+  native: "Native: no per-chunk events; <code>FILE_UPDATED</code> on each pause or stop instead of <code>CHUNK_ADDED</code>. Web adds <code>WEB_LIFECYCLE / TAB_FROZEN</code>, <code>TAB_UNFROZEN</code>." },
+
+  C3: { today: [
+    {g: "Normal stop"},
+    ["3.1", "app", "SCRIBE_JOURNEY / PARALLEL_RECORDING_ENDED", "rec", "<b>recording_length</b>, template_id, amplitude stats", "Used by the audio discrepancy metric"],
+    ["3.2", "app", "Final CHUNK_ADDED + FLUSHED (is_final), or FLUSH_EMPTY", "rec", "", ""],
+    ["3.3", "app", "SCRIBE_CHUNKING / SESSION_SUMMARY", "rec", "duration_seconds, chunks_created, chunks_uploaded, chunks_pending", "Chunking only"],
+    ["3.4", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / AUDIO_CACHE_STOPPED", "rec", "cache JSON", ""],
+    ["3.5", "app", "RESOURCE_MONITORING / RECORDING_ENDED", "rec", "memory, disk", "The only “RECORDING_ENDED”"],
+    {g: "Too short, empty or deleted"},
+    ["3a", "app", "SCRIBE_FAILED_TOO_SHORT → SHORT_RECORDING_SESSION_DELETED → AUDIO_CACHE_DELETED → SCRIBE_FAILED", "rec", "recording_length, failure_reason", "Under 20 s; logs both TOO_SHORT and FAILED", true],
+    ["3b", "app", "SHORT_RECORDING_SESSION_DELETED → AUDIO_CACHE_DELETED", "rec", "", "Zero chunks (#6363). NoAudioChunksException goes to Sentry only."],
+    ["3c", "app", "FILE_DELETED → AUDIO_CACHE_DELETED", "rec", "file_path, file_size; cache JSON", "User delete; no reason field"],
+    ["3d", "app", "PAUSED_CACHE_DELETE / DELETE_STARTED … DELETE_COMPLETED", "rec / none", "counts", "Paused-caches dialog"],
+    ["—", "app", "SCRIBE_FAILED (no action)", "rec", "failure_reason, stack_trace", "Stop error", true],
+  ], mixpanel: [
+    ["end_visit_tapped, minimized_end_tapped, pip_end_action", "source", ""],
+    ["end_recording_tapped / resume_recording_tapped, second_scribe_confirm_tapped", "none", "Short-recording and verbalize dialogs"],
+    ["chunking_recording_stopped / native_recording_stopped", "uuid + final duration_seconds", ""],
+    ["cache_screen_delete_visit_tapped → _confirmed → visit_cache_deleted", "none", "Discard"],
+  ], gaps: ["G19", "G15"],
+  native: "Native order: ENDED → pause pair → <code>FILE_UPDATED</code> → <code>AUDIO_CACHE_PAUSED</code> → <code>AUDIO_CACHE_READY_TO_UPLOAD</code> → RECORDING_ENDED. No SESSION_SUMMARY." },
+
+  C4a: { today: [
+    {g: "Finalize (up to 15 s wait)"},
+    ["4.1", "app", "SCRIBE_CHUNKING / WAIT_TIMEOUT → FINALIZE_TIMEOUT", "rec", "pending_count, timeout_ms; pending_at_stop", "Wait over 15 s"],
+    ["4.2", "app", "SCRIBE_CHUNKING / FINALIZE_SKIPPED", "rec", "reason = offline, wait_ms", "Cache → error with no event"],
+    ["4.3", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / MANIFEST_FAILED", "rec", "error_class", ""],
+    ["4.4", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / TRIGGER_FAILED", "rec", "error_class, force_combine", "First failure retries with force_combine"],
+    ["4.5", "app", "SCRIBE_CHUNKING / FINALIZE_FAILED", "rec", "<b>stage</b> (claim / signed_urls / chunks / manifest / trigger), error_class", ""],
+    ["4.6", "app", "SCRIBE_CHUNKING / FINALIZE_PARTIAL + PARTIAL_SUBMIT", "rec", "uploaded_count, failed_count", "Cache → error with no event"],
+    ["4.7", "app", "SCRIBE_CHUNKING / FINALIZE_SUCCESS", "rec", "wait_ms, manifest_ms, trigger_ms, chunks_uploaded, chunks_failed", "Fires <b>after</b> the C4b events"],
+    {g: "Recovery and cache health (any time, often next launch)"},
+    ["R.1", "app", "SCRIBE_AUDIO_CACHE_HEALTH_V3 (no action)", "none", "total_caches, errored_scribes, all_caches[].state", "5 s after load, then every 30 min. Stuck-in-cache metric source."],
+    ["R.2", "app", "CHUNK_UPLOAD_RECOVERY / SCAN_STARTED, ATTEMPTED, FAILED, RECOVERED", "rec (some)", "caches_scanned, error_class, recovered_count", "On launch; re-runs finalize. Skips paused caches."],
+    ["R.3", "app", "BACKGROUND_CHUNK_RETRY / RUN_STARTED, CACHE_ATTEMPTED, CACHE_SUCCESS, CACHE_FAILED, RUN_COMPLETED", "rec (some)", "chunks_uploaded, error_class", "Mobile, every 2 h. Success sends no SCRIBE_CREATED."],
+    ["R.4", "app", "ORPHANED_UPLOAD_RECOVERY / FETCHED, POPUP_SHOWN, RECOVERED, DISCARDED, …", "none", "upload_session_id, error_class", "Server-side orphan popup"],
+    ["R.5", "app", "SCRIBE_CACHE_CLEANUP / DELETE", "none", "counts + uuid lists", "On launch. Used by lost-scribes exclusions."],
+  ], mixpanel: [
+    ["toast_shown", "title (error text)", "Upload / finalize error"],
+    ["cache_screen_try_again_tapped, _contact_us_tapped, _download_audio_tapped", "none", ""],
+    ["paused_caches_dialog_upload / skip / delete tapped", "none", ""],
+    ["orphaned_upload_recovery_* tapped", "none", ""],
+  ], gaps: ["G10", "G11", "G12"],
+  native: "Native (full file): <code>AUDIO_CACHE_UPLOADING</code> → validate checks → trigger → <code>AUDIO_CACHE_UPLOAD_ENDED</code>. Errors: <code>SCRIBE_UPLOAD_ERROR / UPLOAD_ERROR</code> (and per HTTP status) → <code>AUDIO_CACHE_ERROR</code>." },
+
+  C4b: { today: [
+    ["5.1", "app", "SCRIBE_CHUNKING / SCRIBE_CREATED", "rec", "<b>scribe_id</b> (column), template_ids", "Chunking only"],
+    ["5.2", "app", "SCRIBE_AUDIO_CACHE_SYNC_V2 / AUDIO_CACHE_UPLOAD_ENDED", "rec", "cache JSON", ""],
+    ["5.3", "app", "FILE_DELETED → AUDIO_CACHE_DELETED", "rec", "cache JSON", ""],
+    ["5.4", "app", "SCRIBE_CHUNKING / FINALIZE_SUCCESS", "rec", "see 4.7", ""],
+    ["—", "table", "Native: scribe row with this uuid", "rec", "scribe.uuid", "Native sends no SCRIBE_CREATED"],
+  ], mixpanel: [], gaps: ["G11", "G12"] },
+
+  B1: { today: [
+    ["6.1", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_SCRIBE_JOURNEY_START", "rec", "scribe_id = none", "First backend touch"],
+    ["6.2", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_DB_CHECKS_PASSED", "rec", "scribe_id = none", ""],
+    ["6.3", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_AUDIO_UPLOAD_START → NORMANDY_WORKLFOWS_AUDIO_UPLOAD_COMPLETED", "scribe", "", "Full-file path (note the typo)"],
+    ["6.4", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_COMBINE_AUDIO_CHUNKS_START → _COMPLETED", "scribe", "", "Chunked path. Async combine sends no COMPLETED; a failed combine hard-deletes the scribe with no event."],
+    ["6.5", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_UPLOAD_MANIFEST_START / _COMPLETED", "scribe", "", "Multi-file combine"],
+    ["6.6", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_TRIGGERED_ERRANDS_FOR_ALL_TRANSCRIPTIONS", "scribe", "", "Transcription dispatched"],
+    ["—", "table", "scribe.task_status → IN_PROGRESS", "", "", ""],
+  ], mixpanel: [], gaps: ["G13"] },
+
+  B2: { today: [
+    ["6.7", "be", "SCRIBE_JOURNEY / TRANSCRIPTION_CALLBACK_START → TRANSCRIPTION_CALLBACK_END", "scribe", "", ""],
+    ["6.8", "be", "SCRIBE_JOURNEY / MEDICAL_SPELLCHECK_*, ENGLISH_SPELLCHECK_*", "scribe", "END: elapsed_ms, correction_count", ""],
+    ["6.9", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_TRANSCRIPTIONS_AND_OCRS_COMPLETED", "scribe", "", "All transcripts done"],
+    ["6.10", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_TRIGGERED_ERRANDS_FOR_ALL_TASKS", "scribe", "", "Note generation dispatched"],
+    ["—", "table", "scribe.audio_length_in_seconds set", "", "", "Set on the transcription callback"],
+    ["—", "none", "Transcription failed", "", "", "No event; only task_status = ERROR"],
+  ], mixpanel: [], gaps: ["G13"] },
+
+  B3: { today: [
+    ["6.11", "be", "SCRIBE_JOURNEY / POST_NOTE_GENERATION_CALLBACK_START → … → _END", "scribe", "", "Includes ADDITIONAL_TASKS and NOTE_LEVEL_CORRECTIONS"],
+    ["6.12", "be", "SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_ALL_TASKS_COMPLETED", "scribe", "", "Can repeat"],
+    ["—", "table", "scribe.task_status → COMPLETED / ERROR / INCOMPLETE; processing_completed_timestamp", "", "", "Overwritten later; no history"],
+    ["—", "be", "SCRIBE_STUCK_AUTO_BACKFILL / TRIGGERED", "scribe", "workflow_id", "Stuck over 15 min"],
+  ], mixpanel: [
+    ["scribe_status_viewed_in_cache, scribe_status_viewed_&lt;status&gt;, visit_status_viewed_&lt;taskStatus&gt;", "scribe_id, scribe_uuid, scribe_status", ""],
+    ["scribe_card_tapped", "scribe_id, scribe_uuid, scribe_status", "Closest to “note opened”"],
+    ["scribe_&lt;tab&gt;_tab_selected", "template_id, template_name", ""],
+    ["scribe_error_contact_us_tapped, scribe_error_rate_scribe_tapped", "none", ""],
+    ["ai_action_* regenerate", "not checked", ""],
+  ], gaps: ["G13", "G14"] },
+
+  B4: { today: [
+    ["7.1", "be", "SCRIBE_JOURNEY / SCRIBE_AUTO_SYNC_STARTED → SCRIBE_AUTO_SYNC_TRIGGERED", "scribe", "", "Auto-sync"],
+    ["7.2", "be", "SCRIBE_JOURNEY / SCRIBE_AUTO_SYNC_ENDPOINT_CALLED", "scribe", "", ""],
+    ["7.3", "app", "EHR_SYNC_PRESSED (no action)", "scribe_id", "scribe_id", "Manual sync"],
+    ["7.4", "app", "EHR_SYNC_FAILED (no action)", "scribe_id", "error, workflow_id", ""],
+    ["7.5", "app", "NOTE_COPIED (no action)", "scribe_id", "scribe_id, workflow_id, workflow_task_id", "No uuid"],
+    ["7.6", "app", "SEND_TO_MDS_SUCCESS / SEND_TO_MDS_FAILED", "scribe_id", "workflow_id, error", ""],
+    ["7.7", "app", "ACCESSIBILITY_SERVICE_SYNC_SUCCESS / _FAILED", "scribe_id", "", "Android accessibility sync"],
+    ["7.8", "app", "WORKFLOW_TAB_VIEWED; SCRIBE_JOURNEY / AFTER_VISIT_SUMMARY_VIEWED", "none / scribe", "tab_info, template_name", "Closest to “note viewed”"],
+    ["7.9", "app", "SCRIBE_JOURNEY / EMAIL_COPIED, EMAIL_SENT, EMAIL_SEND_DIALOG_OPENED", "scribe", "patient_email", "", true],
+    ["—", "table", "scribe.task_status → SYNCING / SYNCED / SYNC_ERROR / COPIED", "", "", "<b>No event</b> for the sync or copy result"],
+  ], mixpanel: [
+    ["scribe_copy_note", "scribe_id, scribe_uuid, scribe_status", "Fires even when copy is disabled"],
+    ["copy_transcript_tapped", "none", ""],
+    ["scribe_sync_note, scribe_sync_to_ehr, scribe_select_sections_to_sync", "scribe fields", ""],
+    ["scribe_send_to_mds, send_to_mds_tapped", "scribe fields", ""],
+    ["snackbar_shown", "message, type", "e.g. “Note failed to send to MDS”"],
+    ["delete_scribe_tapped → delete_scribe_confirmed → scribe_deleted", "scribe_id", "After delivery"],
+  ], gaps: ["G14"] },
+};
+const GAPS = {
+  G1: "Blocked starts send no event (another recording open, duplicate tab, permission denied, paywall, no template, cancelled, Safari on iOS, “Couldn't start recording”).",
+  G2: "Events before the recording id exists use a random uuid, and there's no session or attempt id, so they can't be joined to the recording.",
+  G3: "RECORDING_INITIATED keeps pinging every 30 s after a blocked start (and after a failed native start).",
+  G4: "PARALLEL_RECORDING_STARTED fires before the mic starts; no “first audio” event. First proof of audio is CHUNK_ADDED at ~30 s.",
+  G5: "A kill before the recording id is saved is never detected; it looks the same as giving up.",
+  G6: "Pause events have no reason (user / no-audio auto / call / interruption / restored after a kill). Interruptions aren't logged, except the end of an iOS one.",
+  G7: "Restoring a cache from started to paused on launch sends no event, so “resumed after a kill” is invisible.",
+  G8: "APP_KILLED_DETECTED is weak: times are the last lifecycle change, was_recording_when_killed is constant, possible session-id mix-up, no exit reason; duration fix skipped for chunking.",
+  G9: "CHUNK_ADDED carries only filePartId; CHUNK_UPLOAD_RETRY_BACKOFF has no recording id.",
+  G10: "When an upload gets stuck, the app doesn't say so. It quietly marks the recording “error” (offline, some pieces failed, pieces missing); we only see it later in the 30-minute health check, not when or why.",
+  G11: "Older single-file recordings never confirm the hand-off. Chunked recordings send “done, here's the scribe id”; single-file ones send nothing, so we look for a scribe with the same recording id.",
+  G12: "Recordings rescued later look like they were never rescued. The background retry doesn't say “scribe created” when it succeeds, and the recovery pop-up's events have no recording id.",
+  G13: "Backend: async combine has no COMPLETED; a failed combine hard-deletes the scribe with no event; transcription failure has no event; no status history.",
+  G14: "SYNCED / SYNC_ERROR / COPIED exist only in task_status; ALL_TASKS_COMPLETED can repeat.",
+  G15: "patient_name is sent in RECORDING_INITIALIZED, PARALLEL_RECORDING_STARTED, SCRIBE_FAILED and LOW_MEMORY_DURING_RECORDING; patient_email in EMAIL_* events.",
+  G16: "Mixpanel: device_id is overwritten by the audio device; resume_recording_tapped has two meanings; *_recording_started can be missed; no upload, hand-off or sync-result events.",
+  G17: "START_RECORDING_ERROR has hard-coded error text and no stack; early errors are mislabelled MID_RECORDING_ERROR.",
+  G18: "LOW_AUDIO_DETECTED uses the first cache's id, which may not be the current recording.",
+  G19: "Too-short recordings never send PARALLEL_RECORDING_ENDED (the check exits first); auto-stop at 3 h seems not to run on chunking.",
+};
+// Agreed fixes (11/5), shown under each gap.
+const FIX = {
+  G1: "New ATTEMPTED, then exactly one PREFLIGHT_BLOCKED{reason} or START_FAILED per exit.",
+  G2: "Create the recording id at ATTEMPTED and put it on every C0 event.",
+  G3: "Send RECORDING_INITIATED once (no timer); native reset also stops it.",
+  G4: "New MIC_LIVE on the first audio packet.",
+  G5: "Save an “open recording” entry with a phase from the tap; TERMINATED_UNEXPECTEDLY{last_phase} at the next launch.",
+  G6: "Add reason to PARALLEL_RECORDING_PAUSED from all 9 callers; INTERRUPTED only for OS-signalled interruptions.",
+  G7: "New auto_paused cache state, reported on TERMINATED_UNEXPECTEDLY{restored_as}.",
+  G8: "Replaced by TERMINATED_UNEXPECTEDLY; exact cause from the Sentry watchdog tagged with the recording id (AFEP-3003).",
+  G9: "Add chunk_index and bytes to CHUNK_ADDED (it becomes “audio saved”); add the recording id to retry backoff.",
+  G10: "Send an event when the cache moves to error, with the reason.",
+  G11: "Send the same SCRIBE_CREATED from single-file uploads.",
+  G12: "Send SCRIBE_CREATED from the background retry and the recovery pop-up; add the recording id to recovery events.",
+  G13: "Not discussed yet.",
+  G14: "Not discussed yet.",
+  G15: "Flag to the app team; remove patient names and emails from payloads.",
+  G16: "Not discussed yet.",
+  G17: "START_FAILED{error_code} from one sender.",
+  G18: "Use the current recording's id.",
+  G19: "Fire PARALLEL_RECORDING_ENDED{reason} on every ending; confirm auto-stop with the app team.",
+};
+const SRC_LABEL = { app: "app event", be: "backend event", table: "scribe table", sentry: "Sentry", none: "nothing logged" };
+const chip = s => `<span class="src s-${s}">${SRC_LABEL[s]}</span>`;
+const countEvents = id => EVENTS[id].today.filter(r => Array.isArray(r) && r[1] !== "none" && r[1] !== "table").length;
+const hasSilent = id => EVENTS[id].today.some(r => Array.isArray(r) && r[1] === "none");
+let stageTab = "today";
+function renderTab(s) {
+  const e = EVENTS[s.id];
+  if (stageTab === "today") {
+    const rows = e.today.map(r => r.g ? `<tr class="grp"><td colspan="5">${r.g}</td></tr>` :
+      `<tr class="${r[1] === "none" ? "silent" : ""}"><td class="seq">${r[0]}</td><td>${chip(r[1])}${r[6] ? '<span class="src s-phi">patient name</span>' : ""}</td>` +
+      `<td class="ta">${r[1] === "none" || r[1] === "table" ? r[2] : `<code>${r[2]}</code>`}</td><td class="uu">${r[3]}</td><td>${r[4] ? `<span class="kf">${r[4]}</span>` : ""}${r[5] ? `<div class="nt">${r[5]}</div>` : ""}</td></tr>`).join("");
+    return `<div class="evscroll"><table class="ev"><tr><th>#</th><th>Source</th><th>Tag / action</th><th>uuid</th><th>Key fields · note</th></tr>${rows}</table></div>` +
+      (e.native ? `<p class="sub" style="margin:8px 0 0">${e.native}</p>` : "");
+  }
+  if (stageTab === "mixpanel") {
+    if (!e.mixpanel.length) return `<p class="sub">No Mixpanel events at this stage.</p>`;
+    return `<table class="ev"><tr><th>Event</th><th>Properties</th><th>Note</th></tr>` +
+      e.mixpanel.map(m => `<tr><td class="ta"><code>${m[0]}</code></td><td>${m[1]}</td><td class="nt">${m[2]}</td></tr>`).join("") + `</table>` +
+      `<p class="sub" style="margin:8px 0 0">Release builds only. Every event also has app_version, device_type, device_id. ${GAPS.G16}</p>`;
+  }
+  if (stageTab === "gaps") return `<ul class="gaps">` + e.gaps.map(g => `<li><b>${g}</b> ${GAPS[g]}<div class="nt"><b>Fix:</b> ${FIX[g]}</div></li>`).join("") + `</ul>`;
+  return `<p>${s.after}</p>`;
+}
+
 function renderStages(active) {
   ["start", "rec", "end", "b"].forEach(l => {
     const el = document.getElementById("lane-" + l);
     const items = STAGES.filter(s => s.lane === l);
     el.innerHTML = items.map((s, i) =>
-      `<button class="stage ${s.id === active ? "on" : ""}" data-id="${s.id}"><small>${s.id}</small>${s.name}</button>` +
+      `<button class="stage ${s.id === active ? "on" : ""}" data-id="${s.id}"><small>${s.id}</small>${s.name}<span class="badge">${countEvents(s.id)} events${hasSilent(s.id) ? '<span class="dot" title="Some steps log nothing"></span>' : ""}</span></button>` +
       (i < items.length - 1 ? '<span class="arrow">→</span>' : "")).join("");
   });
   const s = STAGES.find(x => x.id === active);
@@ -318,9 +596,12 @@ function renderStages(active) {
     <dl class="kv">
       <dt>What it means</dt><dd>${s.plain}</dd>
       <dt>How we know today</dt><dd>${pill(s.today[0])} ${s.today[1]}</dd>
-      <dt>After the change</dt><dd>${s.after}</dd>
       <dt>Can end here as</dt><dd>${s.ends.length ? s.ends.join(" · ") : "<span style='color:var(--muted)'>(passes through)</span>"}</dd>
-    </dl>`;
+    </dl>
+    <div class="toggle" id="stage-tabs">${[["today", "Today's events"], ["mixpanel", "Mixpanel"], ["gaps", "Gaps"], ["after", "After the change"]]
+      .map(([k, l]) => `<button data-t="${k}" class="${k === stageTab ? "on" : ""}">${l}</button>`).join("")}</div>
+    <div id="stage-tab-body">${renderTab(s)}</div>`;
+  document.querySelectorAll("#stage-tabs button").forEach(b => b.onclick = () => { stageTab = b.dataset.t; renderStages(active); });
   document.querySelectorAll(".stage").forEach(b => b.onclick = () => renderStages(b.dataset.id));
 }
 renderStages("C0");
@@ -358,10 +639,12 @@ renderOutcomes("all");
 const TL = {
   today: {
     rows: [
-      ["app", "09:02:10", "<code>PARALLEL_RECORDING_STARTED</code>"],
-      ["app", "09:02:11", "<code>RECORDING_IN_PROGRESS</code>, <code>CHUNK_ADDED</code> …"],
-      ["none", "09:14:??", "nothing (app died)"],
-      ["app", "next day", "<code>APP_KILLED_DETECTED</code>: no reason. Recording restored as \"paused\", same as a user pause"],
+      ["app", "09:02:08", "<code>RESOURCE_MONITORING / RECORDING_INITIATED</code> · random uuid, can't be tied to this recording"],
+      ["app", "09:02:10", "<code>SCRIBE_JOURNEY / RECORDING_INITIALIZED</code> → <code>PARALLEL_RECORDING_STARTED</code> (before the mic starts)"],
+      ["app", "09:02:11", "<code>RESOURCE_MONITORING / RECORDING_IN_PROGRESS</code> every 30 s, <code>SCRIBE_AUDIO_CACHE_SYNC_V2 / CHUNK_ADDED</code> from 09:02:41 …"],
+      ["app", "09:09:40", "<code>APP_LIFECYCLE / BACKGROUND_RECORDING</code>"],
+      ["none", "09:14:??", "nothing (app died); the last ~30 s of audio was only in memory"],
+      ["app", "next day", "<code>APP_LIFECYCLE / APP_KILLED_DETECTED</code>: no reason, times from the last lifecycle change. Recording restored as \"paused\" with no event, same as a user pause"],
       ["none", "", "Crash is in Crashlytics, but has no recording id. Can't connect it."],
       ["none", "", "Was the device opened again? Unknown: no device id on events."],
     ],
@@ -369,14 +652,13 @@ const TL = {
   },
   after: {
     rows: [
-      ["app", "09:02:08", "<code>ATTEMPTED</code> · recording id created"],
-      ["app", "09:02:11", "<code>MIC_LIVE</code> → <code>AUDIO_PERSISTED</code>"],
-      ["app", "09:09:40", "<code>BACKGROUNDED</code>"],
-      ["crash", "09:14:02", "Crashlytics: OutOfMemory · tagged with this recording id"],
-      ["app", "09:31:00", "Next launch: <code>TERMINATED_UNEXPECTEDLY</code> reason <i>low_memory</i> · restored as <b>auto-paused</b>, not \"paused\""],
-      ["app", "09:31:01", "<code>STILL_OPEN</code>: audio still on device, 3 chunks pending"],
-      ["app", "09:31:05", "<code>FINALIZE_SUCCESS</code> (chunks retried, manifest sent) → <code>HANDED_OFF</code> scribe 123456"],
-      ["be", "09:31:06", "<code>LINKED</code> · <code>AUDIO_RECEIVED</code> → <code>NOTE_READY</code> → <code>DELIVERY_SUCCEEDED</code>"],
+      ["app", "09:02:08", "<code>ATTEMPTED</code> · recording id created · open-recording entry saved (phase preflight)"],
+      ["app", "09:02:11", "<code>MIC_LIVE</code> (first audio packet) → first <code>CHUNK_ADDED</code> at 09:02:41 (audio saved)"],
+      ["app", "09:09:40", "<code>APP_LIFECYCLE / BACKGROUND_RECORDING</code>"],
+      ["crash", "09:14:02", "Sentry watchdog: memory kill · tagged with this recording id (AFEP-3003)"],
+      ["app", "09:31:00", "Next launch: <code>TERMINATED_UNEXPECTEDLY</code> last_phase <i>recording</i>, last seen 09:13:41 · restored as <b>auto_paused</b>, not \"paused\""],
+      ["app", "09:31:05", "Recovery uploads the saved chunks → <code>FINALIZE_SUCCESS</code> → <code>SCRIBE_CREATED</code> scribe 123456"],
+      ["be", "09:31:06", "Backend <code>SCRIBE_JOURNEY / NORMANDY_WORKFLOWS_*</code> → note ready → delivered"],
     ],
     verdict: ["var(--ok-bg)", "<b>Outcome: Delivered</b>, with flags <i>killed (low memory)</i> and <i>recovered after kill</i>. The OOM crash is counted against this recording in the crash list."],
   },
@@ -391,61 +673,77 @@ function renderTL(v) {
 document.querySelectorAll("#tl-toggle button").forEach(b => b.onclick = () => renderTL(b.dataset.v));
 renderTL("today");
 
-const BUILD = [
-  { area: "App: ids on every event", why: "So every signal can be tied to a recording, app launch and device.", items: [
-    ["Recording id", "part", "Sent as <code>uuid</code>, but created after permission checks, and random on events outside a recording"],
-    ["App session id (per launch)", "new", ""],
-    ["Install id (per device)", "new", "Needed to tell \"vanished on device\" from \"phone not reopened\""],
-    ["Per-recording sequence number", "new", "Detects missing events"],
+// Tasks: one row per piece of work. [id, task, gaps, owner, phase, ticket, done when]
+const RE = "Recorder eng", BE = "Backend (TBD)", AF = "Arthur";
+const TASKS = [
+  { area: "App: start (C0–C1)", items: [
+    ["T1", "Create the recording id at ATTEMPTED and put it on every C0 event", "G2", RE, "P0", "", "No C0 event has a random uuid"],
+    ["T2", "Send ATTEMPTED, then one PREFLIGHT_BLOCKED{reason} per blocked exit, from one switch in startVisit(); move the Safari-iOS check in", "G1", RE, "P0", "", "Every startVisit() result produces exactly one closing event"],
+    ["T3", "Send RECORDING_INITIATED once (no 30 s timer); native reset() stops the monitor", "G3", RE, "P0", "", "No RECORDING_INITIATED after a blocked start"],
+    ["T4", "Send MIC_LIVE on the first audio packet (non-chunking: first sound-level reading)", "G4", RE, "P0", "", "MIC_LIVE count ≈ recordings with a first CHUNK_ADDED"],
+    ["T5", "Send START_FAILED{error_code} from one sender: mic won't start, early recorder error, start exception, 5 s no-audio check", "G17", RE, "P0", "", "Every failed start has exactly one START_FAILED with a typed code"],
   ]},
-  { area: "App: start and resume", why: "Every start or resume failure has a reason.", items: [
-    ["Attempted, blocked by pre-checks (start and resume)", "new", ""],
-    ["iOS explicit mic-permission check", "new", "Android has it; iOS doesn't"],
-    ["Start / resume failed with typed error codes", "part", "<code>START_RECORDING_ERROR</code> with per-platform strings; typed errors in progress"],
+  { area: "App: recording (C2)", items: [
+    ["T6", "Add reason to PARALLEL_RECORDING_PAUSED from all 9 callers", "G6", RE, "P0", "", "No pause event without a reason"],
+    ["T7", "Send INTERRUPTED / INTERRUPTION_ENDED when the OS takes the mic (call, iOS interruption, route change)", "G6", RE, "P0", "", "iOS interruption start is logged, not only the end"],
+    ["T8", "Add chunk_index and bytes to CHUNK_ADDED; add the recording id to CHUNK_UPLOAD_RETRY_BACKOFF", "G9", RE, "P0", "", "First CHUNK_ADDED can stand in for “audio saved”"],
+    ["T9", "Send PERSIST_ERROR for file / encrypt / decrypt failures; AUDIO_PERSISTED for non-chunking", "", RE, "P0", "", "Encrypt / decrypt failures show up as events, not only in Sentry"],
+    ["T10", "LOW_AUDIO_DETECTED: use the current recording's id", "G18", RE, "P0", "", "Low-audio events match the recording they happened in"],
   ]},
-  { area: "App: during recording", why: "Pauses, interruptions, save errors and kills are told apart.", items: [
-    ["Auto-paused vs user-paused", "new", "Killed recordings come back as plain \"paused\" today"],
-    ["Interruption events (call, audio focus, route change)", "part", "Sent to Sentry only; iOS calls need CallKit"],
-    ["Save errors: SQLite / file / encrypt / decrypt", "part", "SQLite exceptions reach Sentry; no consistent event"],
-    ["Killed last time", "part", "<code>APP_KILLED_DETECTED</code>, without reason or recording"],
+  { area: "App: kills", items: [
+    ["T11", "Keep an open-recording entry (id + phase + time) from the tap; send TERMINATED_UNEXPECTEDLY{last_phase} at the next launch", "G5, G8", RE, "P0", "", "Kills before the mic starts are detected; every kill has last_phase"],
+    ["T12", "Restore killed recordings as auto_paused, not paused (reported on TERMINATED_UNEXPECTEDLY)", "G7", RE, "P0", "", "Stuck-in-cache splits into user-paused and auto-paused"],
+    ["T13", "<b>Decide:</b> should auto-paused recordings upload automatically or prompt the provider?", "", RE + " + product", "P0", "", "Decision written in the PRD (§13 #13)"],
   ]},
-  { area: "App: end and handoff", why: "Reuse what's already good.", items: [
-    ["Chunk upload events with retry", "yes", "Already well covered"],
-    ["Finalize events (wait, retry, manifest, trigger)", "yes", "Chunking only; add the recording id"],
-    ["Non-chunking upload attempts", "new", ""],
-    ["Handed off (with scribe id)", "part", "<code>SCRIBE_CREATED</code> on chunking; partial-submit path to confirm"],
+  { area: "App: end and hand-off (C3–C4b)", items: [
+    ["T14", "Add reason to PARALLEL_RECORDING_ENDED and send it on every ending (incl. too-short); tag the pre-stop pause reason: ending", "G19", RE, "P0", "", "Every ended recording has one ENDED event"],
+    ["T15", "<b>Confirm:</b> does the 3-hour auto-stop run on chunking?", "G19", RE, "P0", "", "Answered; fixed if it doesn't run"],
+    ["T16", "Send AUDIO_CACHE_ERROR{reason} on chunking when a cache moves to error", "G10", RE, "P0", "", "Stuck uploads show up when they happen, not only in the 30-min health check"],
+    ["T17", "Send SCRIBE_CREATED from single-file uploads, the background retry and the recovery pop-up; add the recording id to recovery events", "G11, G12", RE, "P0", "", "Every scribe created from the app has a matching SCRIBE_CREATED"],
+    ["T18", "Add recording_phase to each cache in SCRIBE_AUDIO_CACHE_HEALTH_V3", "", RE, "P0", "", "Open recordings can be listed by phase"],
   ]},
-  { area: "App: open-recordings list & crash tags", why: "\"Lost\" becomes a positive finding; crashes point to recordings.", items: [
-    ["Report open recordings at launch and on the watchdog tick", "new", "Builds on Bhanu's periodic events"],
-    ["Recording id + chunk number on Crashlytics and Sentry", "new", "Meeting action item"],
-    ["Session id, install id, recording phase", "new", ""],
-    ["OS exit reason (Android / iOS)", "new", "Breakdown only (P2)"],
+  { area: "App: ids, crash tags, privacy", items: [
+    ["T19", "Add app_session_id and install_id to every event; recording_seq to lifecycle events", "", RE, "P0", "", "Every event has both ids; gaps in recording_seq are measurable"],
+    ["T20", "Put recording id, phase and chunk index on Crashlytics and Sentry (Sentry watchdog kills carry them)", "G8", RE, "P0", "AFEP-3003", "A watchdog kill links to the recording it interrupted"],
+    ["T21", "Remove patient names and emails from event payloads", "G15", RE, "P0", "", "No patient_name / patient_email in scribe_events"],
+    ["T22", "Telemetry health: EVENTS_DROPPED, queue stats; web sendBeacon", "", RE, "P1", "", "Dropped events are counted"],
+    ["T23", "Read the OS exit reason (Android ApplicationExitInfo, iOS MetricKit) onto TERMINATED_UNEXPECTEDLY", "", RE, "P2", "", "Kills split by memory / crash / swipe"],
   ]},
-  { area: "Backend", why: "Every status change recorded; nothing erased.", items: [
-    ["Link event: recording → scribe", "new", ""],
-    ["Status history (every change)", "new", "<code>task_status</code> is overwritten today"],
-    ["Soft delete instead of hard delete on failure", "new", "Hard-deleted failures look \"lost\" today"],
-    ["Stuck event per scribe", "part", "A 15-min stuck alert exists, but writes nothing per scribe"],
-    ["Stage events: received, transcribed, note, delivery", "part", "Only upload-completed and failed exist"],
+  { area: "Backend", items: [
+    ["T24", "Optional: pre-chart / duplicate flag on an existing backend event at trigger time", "", BE, "P0", "", "Promoted and duplicate scribes are flagged"],
+    ["T25", "STATUS_CHANGED on every task_status change, plus a status history table", "G14", BE, "P0", "", "Delivery and error timing survive later status changes"],
+    ["T26", "Soft delete + failure event instead of hard delete when combine fails", "G13", BE, "P0", "", "No scribe disappears without an event"],
+    ["T27", "A stuck event per scribe past N minutes at a stage", "", BE, "P0", "", "Stuck is an explicit state"],
+    ["T28", "Missing stage events: transcription failed, async combine completed, delivery result", "G13, G14", BE, "P1", "", "Each backend stage has a start and an end event"],
+    ["T29", "ALL_TASKS_COMPLETED once per scribe; X-Recording-Id header in logs", "", BE, "P2", "", ""],
   ]},
-  { area: "Data, views & validation", why: "Per-recording tables; checked against support tickets.", items: [
-    ["Crash pipeline into BigQuery", "yes", "Crashlytics + Sentry, daily, matches the weekly report"],
-    ["One row per crash, copied to StarRocks", "new", "With Prokash"],
-    ["Per-recording outcome + timeline tables", "new", ""],
-    ["Funnel view, recording list, timeline", "new", "Tool pending (see below)"],
-    ["Map 10–15 days of support tickets to outcomes", "new", "Acceptance test"],
+  { area: "Data, views, validation", items: [
+    ["T30", "recording_outcome on today's events (legacy path), in StarRocks", "", AF, "P0", "", "Last week's recordings each have one outcome"],
+    ["T31", "Map 10–15 days of support tickets to outcomes (acceptance test)", "", AF, "P0", "", "Every ticket lands in one outcome; misses become logging gaps"],
+    ["T32", "One row per crash, copied to StarRocks", "", AF + " + Prokash", "P1", "", "Crashes join to sessions and recordings"],
+    ["T33", "Contract classifier, recording_trace, session_outcome", "", AF, "P1", "", "New app versions use the contract path"],
+    ["T34", "Grafana alerts and data quality strip on StarRocks", "", AF, "P1", "", "Alerts link to the recording list"],
+    ["T38", "Daily outcome job → recording_outcome + one RECORDING_OUTCOME event per recording (to Mixpanel)", "", AF, "P1", "", "Mixpanel and Grafana show the same outcome counts"],
+    ["T39", "Grafana recording list, per-recording timeline, ops panels (replaces the Retool page)", "", AF, "P0", "", "Any recording can be looked up and its timeline shown"],
+  ]},
+  { area: "Mixpanel pipeline", items: [
+    ["T35", "Pub/Sub → Mixpanel subscriber: forward funnel events only, $insert_id = client_event_id, phone time, retry queue", "", BE, "P0", "", "Funnel events appear in Mixpanel once each, grouped by recording"],
+    ["T36", "Keep client_event_id (in payload) on every app event", "", BE, "P0", "", "Repeat sends can be deduped"],
+    ["T37", "<b>Check:</b> Mixpanel approval (BAA / security); project and Group Analytics on recording_id", "", AF, "P0", "", "Approved before anything is sent"],
   ]},
 ];
-document.getElementById("build-list").innerHTML = BUILD.map(b => {
-  const c = { yes: 0, part: 0, new: 0 };
-  b.items.forEach(i => c[i[1]]++);
-  const counts = Object.entries(c).filter(([, n]) => n).map(([k, n]) =>
-    `<span class="pill ${PILL[k][0]}">${n} ${PILL[k][1]}</span>`).join("");
-  return `<details><summary><span>${b.area} <span style="font-weight:400;color:var(--muted)">· ${b.why}</span></span><span class="counts">${counts}</span></summary>
-    <table><tr><th>Item</th><th>Today</th><th>Note</th></tr>` +
-    b.items.map(([n, s, x]) => `<tr><td>${n}</td><td>${pill(s)}</td><td style="color:var(--muted)">${x}</td></tr>`).join("") +
+const REUSED = "Reused as is: chunk upload events, finalize events (FINALIZE_*), background / foreground events, the crash pipeline into BigQuery, and the cache health event as the open-recordings list.";
+
+document.getElementById("build-list").innerHTML = TASKS.map(b => {
+  const ph = { P0: 0, P1: 0, P2: 0 };
+  b.items.forEach(i => ph[i[4]]++);
+  const counts = Object.entries(ph).filter(([, n]) => n).map(([k, n]) =>
+    `<span class="pill ${k === "P0" ? "p-new" : k === "P1" ? "p-part" : "p-yes"}">${n} ${k}</span>`).join("");
+  return `<details open><summary><span>${b.area}</span><span class="counts">${counts}</span></summary>
+    <table><tr><th>#</th><th>Task</th><th>Gaps</th><th>Owner</th><th>Phase</th><th>Ticket</th><th>Done when</th></tr>` +
+    b.items.map(([id, t, g, o, ph, tk, d]) => `<tr><td style="color:var(--muted)">${id}</td><td>${t}</td><td style="white-space:nowrap">${g}</td><td>${o}</td><td>${ph}</td><td>${tk}</td><td style="color:var(--muted)">${d}</td></tr>`).join("") +
     "</table></details>";
-}).join("");
+}).join("") + `<p class="sub" style="margin-top:10px">${REUSED}</p>`;
 
 const links = [...document.querySelectorAll("nav a")];
 const secs = links.map(a => document.querySelector(a.getAttribute("href")));

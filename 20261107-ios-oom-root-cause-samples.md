@@ -11,6 +11,7 @@ Release: `scribe-ios@3.42.1`, last 30 days to 2026-11-07. Sample: 30 users, one 
 - Sentry user id = `scribe_account_id` in Postgres (not `scribe.user_id`).
 
 ## Categories
+
 | Code | Meaning |
 |---|---|
 | A | Memory grows steadily during recording until killed |
@@ -20,6 +21,7 @@ Release: `scribe-ios@3.42.1`, last 30 days to 2026-11-07. Sample: 30 users, one 
 | E | Other or unclear (no samples, short in-dialog recording, mid-recording at low memory) |
 
 ## Tally (30 users)
+
 | Class | Users | Count |
 |---|---|---|
 | A | 311731, 309965, 293330, 272644, 303877, 41105, 283020, 36433, 302233, 300556, 272637*, 288424, 309023, 278886, 302256, 274572 | 16 |
@@ -32,14 +34,50 @@ Release: `scribe-ios@3.42.1`, last 30 days to 2026-11-07. Sample: 30 users, one 
 
 By group: group 1 A4 / B3 / C1 / D1 / E1; group 2 A6 / B2 / D1 / E1; group 3 A6 / B1 / C2 / E1. The mix is similar for typical users and for repeat killers.
 
+## Growth rate (MB per minute of app memory growth)
+Rates are estimates from `recording_heap_sample` breadcrumbs (`phys_footprint_mb`), taken over different intervals. Each user is bucketed by the highest growth rate seen in their trail; for 303151 the growth was after End Visit, not during recording.
+
+| Rate | Users | Count |
+|---|---|---|
+| Above 500 | 311731 (~650), 309965 (~550), 272331 (550 on visit 1, 480 on visit 2), 311955 (~530, over only 73 s, includes carry-over) | 4 |
+| 300–500 | 114516 (~396), 318218 (~500), 293330 (~335), 303151 (~450, after End Visit), 303877 (~346), 41105 (~300), 271113 (323–435), 36433 (~403), 302233 (~348), 300556 (~410), 273698 (337–460), 272637 (~480, first 30 s only), 288424 (430–445), 297572 (274–455), 278886 (335–340), 302256 (475–490), 274572 (345–355) | 17 |
+| Below 300 | 272644 (~267), 283020 (~210), 309023 (~200) | 3 |
+| No samples or no growth | 293513, 313364 (1 sample), 297227 (no samples); 273650, 311108, 284566 (flat, ≤ ~200 MB) | 6 |
+
+- Of the 24 users with a measurable rate, 17 (71%) are in 300–500 MB/min and 21 (88%) are at 300 MB/min or more. Out of all 30, 17 (57%) are in 300–500.
+- The 6 with no growth or no samples include the 3 non-memory kills (273650, 284566, 311108).
+
 ## Findings
-- Growth rate while recording is about 200–550 MB/min (most 330–480). Footprint at the kill sits in a narrow band, about 2.7–3.4 GB, on 5.6–11.7 GB devices, with device free RAM often under 100 MB. Not a low-RAM-device problem.
+- Footprint at the kill sits in a narrow band, about 2.7–3.4 GB, on 5.6–11.7 GB devices, with device free RAM often under 100 MB. Not a low-RAM-device problem.
 - Memory is often not released after End Visit (B, D). Seen as carry-over baselines of 1.9–3.2 GB at the next Start Recording, and as +500 to +1,500 MB after End Visit while browsing.
 - Several kills happen outside recording: 41105, 297227, 303151, 318218, 311108, 313364, 272331 were killed 1–8 minutes after End Visit or while idle.
 - The UIKit low-memory warning fires at roughly 2.4–2.7 GB footprint, and kills follow within seconds to minutes. (Inferred; the `ios_low_memory` values are truncated in Sentry.)
 - The `crypto_backend resolved` breadcrumb seen at ramp onset in 288424, 278886 and 302256 is not a cause. It is a one-time telemetry message emitted when the first encrypted-audio operation runs in a launch (AES-GCM engine tag), so it simply marks the first cached audio write after Start Recording. The slow Dart crypto path (`dart_inline` / `dart_background`, higher CPU and memory) is also ruled out as the main driver: across all 9,734 events on the issue (all versions, tag set since 2026-08-09), `crypto_backend` is `native` on 2,549 and empty on 7,185. No event has a Dart value. Empty means no encrypted operation had run yet in that launch, so those kills happen before any audio was cached (idle/browsing/early start).
 - Not every kill is memory. 273650 (iPhone, ~200 MB, 2 GB free, no warnings), 284566 (iPad, 140–180 MB flat), 311108 (flat ~170 MB) look like a different cause. Watchdog terminations can also come from other OS reasons. These need a separate look.
 - Data loss: for 10 accounts checked in Postgres, nearly all recordings still became scribes (statuses COMPLETED/SYNCED). Exceptions: 272644 had 6 INCOMPLETE scribes of 4–9 s audio, 303151 had 1 SYNC_ERROR, 293330 had 1 USER_ERROR. Not checked for the other 20 users.
+
+## Time to kill: a rough ceiling (inference)
+Six trails start a recording from a low baseline (265–423 MB) and the whole recording is visible: 303877, 300556, 278886, 302256, 274572, 288424. They were killed 6–9 minutes in, at 3.2–3.4 GB. Using minutes ≈ (about 3.3 GB − starting memory) ÷ rate: from 0.3 GB at 350 MB/min that is about 8.6 minutes, at 480 MB/min about 6.3 minutes. Both match what we saw. 311731 (0.9 GB start, ~650 MB/min) died at 3.5 minutes, and visits that start at 2–3 GB (B) die within 1–5 minutes.
+
+So the app behaves as if it has a ceiling of about 3 GB, whatever the phone's RAM, and a clean start leaves roughly 6–9 minutes of recording. This is my reading of the numbers, not something the app reports.
+
+Recordings longer than that do finish: saved audio reaches 22 minutes (311955), 34 minutes (313364) and 46 minutes (114516). How, when memory climbs this fast, was not examined (possibly kills followed by recovery, or lower growth on some runs).
+
+## Where the memory goes
+The app's heap sample (`internal_mb` / `external_mb`) comes from the iOS Mach task counters (`task_vm_info`):
+- `internal_mb` is the app's anonymous memory. The Dart heap and malloc allocations both count here, and so would any audio held in memory.
+- `external_mb` is file-backed or mapped memory.
+
+In the trails I read, `external_mb` stays flat (about 55–110 MB) while `internal_mb` grows by 2+ GB. So the growth is in anonymous memory. That is not yet attributed: it could be the Dart heap, malloc, or audio held in memory. The sample breadcrumbs do not carry `malloc_in_use_mb`, which would separate malloc from the Dart heap. The app also sends these samples as `RESOURCE_MONITORING` events, which may include it; prod `scribe_events` can only be queried through Retool.
+
+## Audio versus memory
+Saved audio per scribe averages 155 s to about 20 minutes across the 10 accounts checked in Postgres, while memory reaches about 3 GB. For scale, even uncompressed 48 kHz stereo 32-bit audio is only about 23 MB per minute (48,000 × 4 bytes × 2 channels × 60 s), more than 10 times less than the 300–500 MB/min we see. (The recorder's actual format was not checked.) Raw audio alone does not explain the growth.
+
+## Device and OS
+No pattern. Sampled users run iPhone 14 through iPhone 19 and two iPads, on iOS 26.3.1 to 27.2, with 5.6–11.7 GB of RAM. Group 3 (typical users) looks like groups 1 and 2.
+
+## Open question: is this new in 3.42.1?
+The issue has existed since 2024-05 and this sample covers only 3.42.1. We cannot say whether memory growth is a regression. Repeating the same sampling on the previous version would answer that.
 
 ## Caveats
 - One kill per user. Some users may fall in another class on other days.
@@ -48,48 +86,72 @@ By group: group 1 A4 / B3 / C1 / D1 / E1; group 2 A6 / B2 / D1 / E1; group 3 A6 
 - A/B and B/D lines are judgment calls.
 
 ## Group 1 — top 10 by kill count
-| User | Kills | Device / OS | Sentry event | Class | Evidence |
-|---|---|---|---|---|---|
-| 293513 | 136 | iPhone16,1 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/e8d4b7d7b22149729a16d2cb989a0594/ | E | Idle kill about 1 min after End Recording / Update Scribe; low-memory warning at 17:23; app had been running less than 1 min at the start of the trail; no recording samples |
-| 311955 | 95 | iPhone17,1 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/cf7d584a2bc7429fb74898a540d686e3/ | B | Visit 2+: starts at 2.5 GB after Resume Visit; many low-memory warnings; grows 2.7 → 3.3 GB; killed opening a new RecordingScreen. 38 scribes landed (COMPLETED) |
-| 311731 | 94 | iPhone19,3 / iOS 27.2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/fe89d4ae7ac849efa82ad7be6f745d4b/ | A | 0.9 → 3.2 GB in 3.5 min after Start Recording; kept growing after End Visit; 11.6 GB device |
-| 114516 | 89 | iPhone18,3 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/01d702c246064b2aaabb354923b28e89/ | B | Visit 1: 263 → 2,938 MB in 6.75 min (~396 MB/min); visit 2 started at 3,234 MB; killed 0.7 s after starting a second recording |
-| 318218 | 85 | iPhone17,3 / iOS 26.6.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/04c90955a0dc43d49929a3af81767496/ | C* | Two short recordings; last sample ~0.9 GB; low memory 3 min after End Visit; truncated footprint "26…" may be 2.6 GB (then D) |
-| 309965 | 63–75 | iPhone19,2 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/02ef4842b993476287e378277e017d17/ | A | 607 → 1,980 MB (~550 MB/min); footprint stayed ~1.98 GB after End Visit; low-memory burst 65 s after End Visit. Kills all on or before 10-30 |
-| 313364 | 72 | iPhone18,1 / iOS 26.6.2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/05d987dfb36d4073bdd0677505b8db4f/ | B | Killed ~4.7 min after recording ended, footprint ~2.1 GB, 12 LOW_MEMORY in 0.4 s; 3 background cycles; (C also fits) |
-| 293330 | 56 | iPhone16,2 / iOS 26.6.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/0235b397bf6e4014a681d9985f6c87dd/ | A | 2,703 → 3,160 MB (~335 MB/min); stayed 3.16 GB after End Visit; start of recording not visible |
-| 272644 | 53 | iPhone16,1 / iOS 26.6.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/00187ca325b140a19806d97eb041c636/ | A | 2,737 → 3,358 MB (~267 MB/min), 40 LOW_MEMORY within 2 s; no navigation crumbs in buffer. 6 INCOMPLETE scribes (4–9 s audio) |
-| 303151 | 39 | iPhone17,1 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/02a87c0662044743852ad3f470194c90/ | D | 436 MB at End Visit → ~1.78 GB three minutes later while browsing visit/EHR screens; later recordings start at 1.84 GB. 1 SYNC_ERROR on 11-04 |
+
+| User | Kills | Device / OS | Sentry event | Class | MB/min | Evidence |
+|---|---|---|---|---|---|---|
+| 293513 | 136 | iPhone16,1 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/e8d4b7d7b22149729a16d2cb989a0594/ | E | n/a | Idle kill about 1 min after End Recording / Update Scribe; low-memory warning at 17:23; app had been running less than 1 min at the start of the trail; no recording samples |
+| 311955 | 95 | iPhone17,1 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/cf7d584a2bc7429fb74898a540d686e3/ | B | ~530 | Visit 2+: starts at 2.5 GB after Resume Visit; many low-memory warnings; grows 2.7 → 3.3 GB; killed opening a new RecordingScreen. 38 scribes landed (COMPLETED) |
+| 311731 | 94 | iPhone19,3 / iOS 27.2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/fe89d4ae7ac849efa82ad7be6f745d4b/ | A | ~650 | 0.9 → 3.2 GB in 3.5 min after Start Recording; kept growing after End Visit; 11.6 GB device |
+| 114516 | 89 | iPhone18,3 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/01d702c246064b2aaabb354923b28e89/ | B | ~396 | Visit 1: 263 → 2,938 MB in 6.75 min; visit 2 started at 3,234 MB; killed 0.7 s after starting a second recording |
+| 318218 | 85 | iPhone17,3 / iOS 26.6.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/04c90955a0dc43d49929a3af81767496/ | C* | ~500 | Two short recordings; last sample ~0.9 GB; low memory 3 min after End Visit; truncated footprint "26…" may be 2.6 GB (then D) |
+| 309965 | 63–75 | iPhone19,2 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/02ef4842b993476287e378277e017d17/ | A | ~550 | 607 → 1,980 MB; footprint stayed ~1.98 GB after End Visit; low-memory burst 65 s after End Visit. Kills all on or before 10-30 |
+| 313364 | 72 | iPhone18,1 / iOS 26.6.2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/05d987dfb36d4073bdd0677505b8db4f/ | B | n/a | Killed ~4.7 min after recording ended, footprint ~2.1 GB, 12 LOW_MEMORY in 0.4 s; 3 background cycles; one sample only; (C also fits) |
+| 293330 | 56 | iPhone16,2 / iOS 26.6.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/0235b397bf6e4014a681d9985f6c87dd/ | A | ~335 | 2,703 → 3,160 MB; stayed 3.16 GB after End Visit; start of recording not visible |
+| 272644 | 53 | iPhone16,1 / iOS 26.6.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/00187ca325b140a19806d97eb041c636/ | A | ~267 | 2,737 → 3,358 MB, 40 LOW_MEMORY within 2 s; no navigation crumbs in buffer. 6 INCOMPLETE scribes (4–9 s audio) |
+| 303151 | 39 | iPhone17,1 / iOS 27.0.1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/02a87c0662044743852ad3f470194c90/ | D | ~450 (after End Visit) | 436 MB at End Visit → ~1.78 GB three minutes later while browsing visit/EHR screens; later recordings start at 1.84 GB. 1 SYNC_ERROR on 11-04 |
 
 ## Group 2 — ranks 11–20
-| User | Kills | Device | Sentry event | Class | Evidence |
-|---|---|---|---|---|---|
-| 272331 | 32 | iPhone18,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/04d0ec4da88b4b8dbd4cf863bc6de80d/ | B | Visit 1 698 → 1,232 MB; +756 MB in 61 s after End Visit; visit 2 started at 2.1 GB; killed <1 min after End Visit (overlaps D) |
-| 303877 | 31 | iPhone17,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/03a98038cd024e37ac93b528b07622da/ | A | 423 → 3,371 MB (~346 MB/min); killed 8.5 min into recording |
-| 41105 | 31 | iPhone16,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/00593ce8a048491da1facceaf4e51f02/ | A | 319 → 2,104 MB (~300 MB/min) during a 6 min recording; killed ≥8 min after End Visit while idle |
-| 297227 | 30 | iPhone18,3 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/013475bf99d54b00bda2d4b609912aca/ | E | ~45 s recording in the AI Actions dialog (no recording screen); idle 5 min later; free RAM 89 MB; no samples |
-| 283020 | 29 | iPhone18,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/057fff4128594308978de7d0efe832ea/ | A | 2,701 → 3,371 MB (~210 MB/min); ~41 low-memory warnings; start not visible |
-| 271113 | 26 | iPhone18,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/15f840015be74fa48d2e7c86a1f889c0/ | B | Visit 1 336 → 1,385 MB; visit 2 started at 1,879 MB and reached 3,334 MB; killed 4.5 min into visit 2 |
-| 36433 | 24 | iPhone17,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/05217118823a42b8a99f6827a5779a84/ | A | 622 → 3,324 MB (~403 MB/min); grew ~1.1 GB while paused for 2.2 min |
-| 302233 | 23 | iPhone17,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/0accb471f4494e4381c1288315e968b6/ | A | 2,757 → 3,278 MB (~348 MB/min); ~48 low-memory warnings; start not visible |
-| 300556 | 23 | iPhone17,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/03a4d45a88e546219b8e2b79793cc376/ | A | 367 → 3,245 MB (~410 MB/min); killed 7 min into recording |
-| 273698 | 23 | iPhone17,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/1588a0962b9e4137acc374ebe09fa3b8/ | D | Visit 1 703 → 1,631 MB; +1,500 MB in 3.3 min while browsing between visits (~460 MB/min); visit 2 started at 3.1 GB |
+
+| User | Kills | Device | Sentry event | Class | MB/min | Evidence |
+|---|---|---|---|---|---|---|
+| 272331 | 32 | iPhone18,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/04d0ec4da88b4b8dbd4cf863bc6de80d/ | B | 480–550 | Visit 1 698 → 1,232 MB; +756 MB in 61 s after End Visit; visit 2 started at 2.1 GB; killed <1 min after End Visit (overlaps D) |
+| 303877 | 31 | iPhone17,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/03a98038cd024e37ac93b528b07622da/ | A | ~346 | 423 → 3,371 MB; killed 8.5 min into recording |
+| 41105 | 31 | iPhone16,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/00593ce8a048491da1facceaf4e51f02/ | A | ~300 | 319 → 2,104 MB during a 6 min recording; killed ≥8 min after End Visit while idle |
+| 297227 | 30 | iPhone18,3 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/013475bf99d54b00bda2d4b609912aca/ | E | n/a | ~45 s recording in the AI Actions dialog (no recording screen); idle 5 min later; free RAM 89 MB; no samples |
+| 283020 | 29 | iPhone18,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/057fff4128594308978de7d0efe832ea/ | A | ~210 | 2,701 → 3,371 MB; ~41 low-memory warnings; start not visible |
+| 271113 | 26 | iPhone18,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/15f840015be74fa48d2e7c86a1f889c0/ | B | 323–435 | Visit 1 336 → 1,385 MB; visit 2 started at 1,879 MB and reached 3,334 MB; killed 4.5 min into visit 2 |
+| 36433 | 24 | iPhone17,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/05217118823a42b8a99f6827a5779a84/ | A | ~403 | 622 → 3,324 MB; grew ~1.1 GB while paused for 2.2 min |
+| 302233 | 23 | iPhone17,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/0accb471f4494e4381c1288315e968b6/ | A | ~348 | 2,757 → 3,278 MB; ~48 low-memory warnings; start not visible |
+| 300556 | 23 | iPhone17,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/03a4d45a88e546219b8e2b79793cc376/ | A | ~410 | 367 → 3,245 MB; killed 7 min into recording |
+| 273698 | 23 | iPhone17,1 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/1588a0962b9e4137acc374ebe09fa3b8/ | D | 337–460 | Visit 1 703 → 1,631 MB; +1,500 MB in 3.3 min while browsing between visits (~460 MB/min); visit 2 started at 3.1 GB |
 
 ## Group 3 — 1–5 kills each
-| User | Kills | Device | Sentry event | Class | Evidence |
-|---|---|---|---|---|---|
-| 273650 | 1 | iPhone19,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/ce5b58d3e557485590a7cafd337974a5/ | E | Killed ~70 s into a recording at ~200 MB footprint, 2 GB free, no warnings; not a memory pattern |
-| 311108 | 1 | iPhone14,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/2d7c6359d34f43ce9fefab634205bc44/ | C | Flat ~165 MB; 5.6 GB device, free RAM 40–270 MB; killed ≥4.5 min after End Visit while backgrounded |
-| 272637 | 1 | iPad15,7 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/5a8adc46bbb74418b1927f7e8520399e/ | A* | 281 → 526 MB in the first 30 s (~480 MB/min); then paused ~7 min, killed with free RAM ~38 MB; only 30 s of samples |
-| 284566 | 1 | iPad15,7 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/6301e6aa3c3844f89c3b716a31a428ca/ | C | Flat 140–180 MB across a 27+ min recording session with 3 pauses; no warnings; not a memory pattern |
-| 288424 | 2 | iPhone18,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/10b2774cdb454edbba94514d3e06439c/ | A | 285 → 3,169 MB (~430–445 MB/min); `crypto_backend resolved` at ramp onset |
-| 309023 | 2 | iPhone14,7 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/9da5ec9128504542b8cd431f2a3e155d/ | A | 1,212 → 2,925 MB (~200 MB/min); plateau ~2.9 GB; killed on foreground resume after 4 min in background |
-| 297572 | 4 | iPhone18,5 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/39effaa998964bbcbaf2e5f11a3b138f/ | B | Visit 1 ended at 1.3 GB; visit 2 started at 2.0 GB and reached 3.36 GB; 6 background cycles, growth continued while backgrounded |
-| 278886 | 4 | iPhone16,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/15a1818510d94e51bf5ffc4a1c6fc18d/ | A | 285 → 3,317 MB (~335–340 MB/min, linear); `crypto_backend resolved` at ramp onset |
-| 302256 | 5 | iPhone19,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/07828dc843114af4a6970fafe0b2e7be/ | A | 265 → 3,208 MB (~475–490 MB/min); `crypto_backend resolved` at ramp onset |
-| 274572 | 5 | iPhone16,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/20e142a5810e4b61b2e478aafc70cc84/ | A | 352 → 3,340 MB (~345–355 MB/min) over 8.5 min; killed right after Pause |
+
+| User | Kills | Device | Sentry event | Class | MB/min | Evidence |
+|---|---|---|---|---|---|---|
+| 273650 | 1 | iPhone19,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/ce5b58d3e557485590a7cafd337974a5/ | E | ~0 | Killed ~70 s into a recording at ~200 MB footprint, 2 GB free, no warnings; not a memory pattern |
+| 311108 | 1 | iPhone14,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/2d7c6359d34f43ce9fefab634205bc44/ | C | ~0 | Flat ~165 MB; 5.6 GB device, free RAM 40–270 MB; killed ≥4.5 min after End Visit while backgrounded |
+| 272637 | 1 | iPad15,7 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/5a8adc46bbb74418b1927f7e8520399e/ | A* | ~480 (first 30 s) | 281 → 526 MB in the first 30 s; then paused ~7 min, killed with free RAM ~38 MB; only 30 s of samples |
+| 284566 | 1 | iPad15,7 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/6301e6aa3c3844f89c3b716a31a428ca/ | C | ~0 | Flat 140–180 MB across a 27+ min recording session with 3 pauses; no warnings; not a memory pattern |
+| 288424 | 2 | iPhone18,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/10b2774cdb454edbba94514d3e06439c/ | A | 430–445 | 285 → 3,169 MB; `crypto_backend resolved` at ramp onset (not a cause, see Findings) |
+| 309023 | 2 | iPhone14,7 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/9da5ec9128504542b8cd431f2a3e155d/ | A | ~200 | 1,212 → 2,925 MB; plateau ~2.9 GB; killed on foreground resume after 4 min in background |
+| 297572 | 4 | iPhone18,5 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/39effaa998964bbcbaf2e5f11a3b138f/ | B | 274–455 | Visit 1 ended at 1.3 GB; visit 2 started at 2.0 GB and reached 3.36 GB; 6 background cycles, growth continued while backgrounded |
+| 278886 | 4 | iPhone16,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/15a1818510d94e51bf5ffc4a1c6fc18d/ | A | 335–340 | 285 → 3,317 MB, linear |
+| 302256 | 5 | iPhone19,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/07828dc843114af4a6970fafe0b2e7be/ | A | 475–490 | 265 → 3,208 MB |
+| 274572 | 5 | iPhone16,2 | https://athelas-monitoring.sentry.io/issues/SCRIBE-MOBILE-B0/events/20e142a5810e4b61b2e478aafc70cc84/ | A | 345–355 | 352 → 3,340 MB over 8.5 min; killed right after Pause |
+
+## How to reproduce
+- Sentry user id = `scribe_account_id`. Sentry project `scribe-mobile`, org `athelas-monitoring`.
+- Top users by kill count (errors dataset, 30 days): `issue:SCRIBE-MOBILE-B0 release:scribe-ios@3.42.1`, group by `user.id`, `count()`, sorted by `-count()`. For 1–5 kill users use the same query sorted by `count()` ascending over 14 days.
+- Breadcrumbs for one event: `get_issue_breadcrumbs` with issue `SCRIBE-MOBILE-B0` and the event id, or open the event link in the tables.
+- Crypto backend split: tag `crypto_backend` on the issue.
+- Postgres (prod replica, read-only), per account and day:
+
+```sql
+select scribe_account_id, date(created_at) as day, task_status::text as status,
+       count(*) as scribes, round(avg(audio_length_in_seconds)) as avg_audio_s,
+       max(audio_length_in_seconds) as max_audio_s
+from scribe
+where scribe_account_id in (<ids>)
+  and created_at >= '<start>' and created_at < '<end>'
+group by 1,2,3 order by 1,2 limit 80;
+```
+
+- Memory fields come from `lib/src/features/record/services/resource_monitoring_service.dart` and `resource_metrics_collector_io.dart` (scribe-mobile), with the iOS values read in `packages/recorder/ios/Classes/RecorderPlugin.swift`.
 
 ## Suggested next steps
 1. Hand the iOS team the A/B/D pattern: what holds memory during recording and after End Visit. Crypto backend is not the lead (all `native` or unset).
 2. Look separately at the non-memory kills (273650, 284566, 311108), which look like another cause.
 3. Check Postgres for the 20 users not yet checked, to confirm kills rarely lose scribes.
+4. Repeat the sampling on the previous version to see whether this is a regression.
+5. Attribute the anonymous memory (Dart heap vs malloc vs audio held in memory), using `malloc_in_use_mb` from `RESOURCE_MONITORING` events or a look at the recorder code.

@@ -1,0 +1,521 @@
+---
+title: "iOS OOM — memory sample gap (2026-11-07)"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>iOS OOM — memory sample gap (2026-11-07)</title>
+<style>
+  :root {
+    --ink: #1f2937;
+    --sub: #52606d;
+    --bg: #ffffff;
+    --panel: #f6f7f9;
+    --border: #e2e5ea;
+    --blue: #2f6fed;
+    --blue-bg: #eaf1ff;
+    --amber: #b7791f;
+    --amber-bg: #fff6e5;
+    --green: #1a7f52;
+    --green-bg: #e9f7ef;
+    --red: #c0392b;
+    --red-bg: #fdecea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 24px 80px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .meta { color: var(--sub); font-size: 14px; margin-bottom: 28px; }
+  h2 {
+    font-size: 18px;
+    margin: 40px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  p { color: #2d3748; }
+  .lede {
+    font-size: 16px;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+  code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 6px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--sub); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  .diagram-wrap {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 12px 8px;
+    background: #fafbfc;
+    overflow-x: auto;
+  }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--sub); margin: 8px 4px 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+  .note { font-size: 13px; color: var(--sub); margin-top: 8px; }
+  footer { margin-top: 56px; color: var(--sub); font-size: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>The memory trail stops when recording stops</h1>
+  <div class="meta">2026-11-07 · iOS memory kills, <span class="mono">SCRIBE-MOBILE-B0</span> · why “grew after End Visit” is not yet measured</div>
+
+  <div class="lede">
+    <code>recording_heap_sample</code> records footprint every 30 seconds, and only while the recording timer is running.
+    Pause and End Visit each leave one sample, then the timer is cancelled.
+    The next number is the first sample of whatever recording starts next.
+    Two very different stories fit those two points.
+  </div>
+
+  <h2>What a visit looks like in the breadcrumb trail</h2>
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="gapTitle gapDesc">
+      <title id="gapTitle">Heap samples exist only while recording is running</title>
+      <desc id="gapDesc">Two timelines. During pause and after End Visit the sampler is off. A flat-then-jump path and a steady-climb path both pass through the same two measured points.</desc>
+      <defs>
+        <pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(35)">
+          <line x1="0" y1="0" x2="0" y2="8" stroke="#d7dbe2" stroke-width="3"/>
+        </pattern>
+        <pattern id="hatchAmber" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(35)">
+          <line x1="0" y1="0" x2="0" y2="8" stroke="#f0d7a6" stroke-width="3"/>
+        </pattern>
+      </defs>
+
+      <!-- ========== Panel A ========== -->
+      <text x="8" y="22" font-size="13" font-weight="700" fill="#1f2937">1 · Pause</text>
+      <text x="78" y="22" font-size="12" fill="#52606d">timer stops at Pause and starts again at Resume</text>
+
+      <!-- plot frame -->
+      <rect x="56" y="36" width="880" height="168" rx="8" fill="#ffffff" stroke="#e2e5ea"/>
+      <!-- y grid -->
+      <g stroke="#eef0f3" stroke-width="1">
+        <line x1="108" y1="58" x2="916" y2="58"/>
+        <line x1="108" y1="100" x2="916" y2="100"/>
+        <line x1="108" y1="142" x2="916" y2="142"/>
+      </g>
+      <g font-size="11" fill="#52606d" text-anchor="end">
+        <text x="100" y="62">3 GB</text>
+        <text x="100" y="104">2 GB</text>
+        <text x="100" y="146">1 GB</text>
+        <text x="100" y="184">0</text>
+      </g>
+
+      <!-- known recording run into the pause -->
+      <polyline fill="none" stroke="#2f6fed" stroke-width="2"
+        points="140,168 190,158 240,146 290,132 340,124"/>
+      <g fill="#2f6fed">
+        <circle cx="140" cy="168" r="4.5"/>
+        <circle cx="190" cy="158" r="4.5"/>
+        <circle cx="240" cy="146" r="4.5"/>
+        <circle cx="290" cy="132" r="4.5"/>
+        <circle cx="340" cy="124" r="4.5"/>
+      </g>
+
+      <!-- gap band -->
+      <rect x="356" y="44" width="250" height="152" fill="url(#hatch)"/>
+      <text x="481" y="58" text-anchor="middle" font-size="11" font-weight="700" fill="#8a94a6">NO SAMPLES</text>
+
+      <!-- path A: climb across the pause -->
+      <path d="M356,124 C450,124 500,78 606,70" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="5 4"/>
+      <!-- path B: flat, then jump at resume -->
+      <path d="M356,124 H586 V70" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="2 3"/>
+
+      <!-- boundary diamonds -->
+      <g fill="#b7791f" stroke="#ffffff" stroke-width="1.5">
+        <polygon points="356,124 362,130 356,136 350,130"/>
+        <polygon points="606,70 612,76 606,82 600,76"/>
+      </g>
+
+      <!-- labels -->
+      <g font-size="11" fill="#1f2937">
+        <text x="140" y="198" text-anchor="middle" fill="#52606d">recording</text>
+        <text x="356" y="198" text-anchor="middle">Pause</text>
+        <text x="356" y="210" text-anchor="middle" fill="#52606d">~1.6 GB</text>
+        <text x="606" y="198" text-anchor="middle">Resume</text>
+        <text x="606" y="210" text-anchor="middle" fill="#52606d">~2.7 GB</text>
+      </g>
+      <text x="470" y="96" font-size="11" fill="#b7791f">climbed while paused</text>
+      <text x="430" y="154" font-size="11" fill="#6b7280">flat, then jumped at Resume</text>
+
+      <!-- sampler bar -->
+      <text x="8" y="232" font-size="11" fill="#52606d">sampler</text>
+      <rect x="120" y="220" width="236" height="16" rx="3" fill="#1a7f52"/>
+      <rect x="356" y="220" width="250" height="16" rx="3" fill="url(#hatch)" stroke="#e2e5ea"/>
+      <rect x="606" y="220" width="80" height="16" rx="3" fill="#1a7f52"/>
+      <g font-size="10" fill="#ffffff">
+        <text x="238" y="231" text-anchor="middle">on · every 30s</text>
+      </g>
+      <text x="481" y="231" text-anchor="middle" font-size="10" fill="#52606d">off · one sample at each edge</text>
+      <text x="646" y="231" text-anchor="middle" font-size="10" fill="#ffffff">on</text>
+
+      <!-- ========== Panel B ========== -->
+      <text x="8" y="278" font-size="13" font-weight="700" fill="#1f2937">2 · After End Visit</text>
+      <text x="148" y="278" font-size="12" fill="#52606d">timer stops after the End Visit sample. Next dot is the next Start Recording, or never.</text>
+
+      <rect x="56" y="292" width="880" height="168" rx="8" fill="#ffffff" stroke="#e2e5ea"/>
+      <g stroke="#eef0f3" stroke-width="1">
+        <line x1="108" y1="314" x2="916" y2="314"/>
+        <line x1="108" y1="356" x2="916" y2="356"/>
+        <line x1="108" y1="398" x2="916" y2="398"/>
+      </g>
+      <g font-size="11" fill="#52606d" text-anchor="end">
+        <text x="100" y="318">3 GB</text>
+        <text x="100" y="360">2 GB</text>
+        <text x="100" y="402">1 GB</text>
+        <text x="100" y="440">0</text>
+      </g>
+
+      <!-- recording into end: y mapped in this panel. 0 at 448, 3GB at 314 → 44.7 px/GB
+           1.6 GB → 448-71.5 = 376.5; 3.1 GB → 448-138.6 = 309. Use 376 and 318 -->
+      <polyline fill="none" stroke="#2f6fed" stroke-width="2"
+        points="140,420 200,404 260,388 320,376"/>
+      <g fill="#2f6fed">
+        <circle cx="140" cy="420" r="4.5"/>
+        <circle cx="200" cy="404" r="4.5"/>
+        <circle cx="260" cy="388" r="4.5"/>
+        <circle cx="320" cy="376" r="4.5"/>
+      </g>
+
+      <rect x="336" y="300" width="430" height="152" fill="url(#hatch)"/>
+      <text x="551" y="316" text-anchor="middle" font-size="11" font-weight="700" fill="#8a94a6">NO SAMPLES · 1 TO 8 MINUTES · KILL CAN LAND HERE</text>
+
+      <!-- climb across the browse gap, ending at next start -->
+      <path d="M336,376 C480,376 620,330 766,318" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="5 4"/>
+      <!-- flat then jump at next start -->
+      <path d="M336,376 H746 V318" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="2 3"/>
+
+      <g fill="#b7791f" stroke="#ffffff" stroke-width="1.5">
+        <polygon points="336,376 342,382 336,388 330,382"/>
+        <polygon points="766,318 772,324 766,330 760,324"/>
+      </g>
+
+      <!-- kill mark inside the gap, no footprint -->
+      <g stroke="#c0392b" fill="none" stroke-width="1.6">
+        <line x1="620" y1="308" x2="620" y2="444"/>
+      </g>
+      <text x="628" y="432" font-size="11" fill="#c0392b">killed here</text>
+      <text x="628" y="446" font-size="11" fill="#c0392b">no later sample</text>
+
+      <g font-size="11" fill="#1f2937">
+        <text x="200" y="454" text-anchor="middle" fill="#52606d">recording</text>
+        <text x="336" y="468" text-anchor="middle">End Visit</text>
+        <text x="336" y="480" text-anchor="middle" fill="#52606d">~1.6 GB</text>
+        <text x="766" y="468" text-anchor="middle">next Start</text>
+        <text x="766" y="480" text-anchor="middle" fill="#52606d">~3.1 GB</text>
+      </g>
+      <text x="400" y="348" font-size="11" fill="#b7791f">climbed while browsing</text>
+      <text x="470" y="408" font-size="11" fill="#6b7280">flat, then jumped at next Start</text>
+
+      <text x="8" y="512" font-size="11" fill="#52606d">sampler</text>
+      <rect x="120" y="500" width="216" height="16" rx="3" fill="#1a7f52"/>
+      <rect x="336" y="500" width="430" height="16" rx="3" fill="url(#hatch)" stroke="#e2e5ea"/>
+      <rect x="766" y="500" width="70" height="16" rx="3" fill="#1a7f52"/>
+      <text x="228" y="511" text-anchor="middle" font-size="10" fill="#ffffff">on · every 30s</text>
+      <text x="551" y="511" text-anchor="middle" font-size="10" fill="#52606d">off</text>
+      <text x="801" y="511" text-anchor="middle" font-size="10" fill="#ffffff">on</text>
+
+      <!-- axis caption -->
+      <text x="480" y="552" text-anchor="middle" font-size="11" fill="#8a94a6">footprint is illustrative, taken from the shape of the 3.42.1 sample, not from one session</text>
+    </svg>
+    <div class="legend">
+      <span><i class="swatch" style="background:#2f6fed"></i> <code>recording_heap_sample</code> every 30s</span>
+      <span><i class="swatch" style="background:#b7791f"></i> one sample at Pause, Resume, or End Visit</span>
+      <span><i class="swatch" style="background:#f0d7a6;border:1px solid #e2e5ea"></i> dashed amber: grew during the gap</span>
+      <span><i class="swatch" style="background:repeating-linear-gradient(90deg,#6b7280 0 3px,transparent 3px 6px)"></i> dashed gray: flat, then a jump at the next sample</span>
+      <span><i class="swatch" style="background:#c0392b"></i> kill with no following sample</span>
+    </div>
+  </div>
+  <p class="note">Both dashed lines pass through the same two measured points. The net change is known. When it happened is not.</p>
+
+  <h2>Where the timer is cut</h2>
+  <table>
+    <thead>
+      <tr><th>Moment</th><th>What the code does</th><th>What the trail contains</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Recording</td>
+        <td><code>ResourceMonitoringService.start</code> samples immediately, then every 30 seconds. Breadcrumb category <code>memory</code>, message <code>recording_heap_sample</code>.</td>
+        <td>A real curve. This is the 300–500 MB/min ramp.</td>
+      </tr>
+      <tr>
+        <td>Pause</td>
+        <td><code>stop()</code> cancels the timer, then one <code>track('RECORDING_PAUSED')</code>.</td>
+        <td>A dot at pause and a dot at resume. Nothing between them.</td>
+      </tr>
+      <tr>
+        <td>End Visit</td>
+        <td>One <code>track(RECORDING_ENDED)</code>, then <code>stop()</code>.</td>
+        <td>A dot at End Visit. The next dot is the next Start Recording, if the process lives that long.</td>
+      </tr>
+      <tr>
+        <td>Killed in the gap</td>
+        <td>UIKit can still emit <code>system.ios_low_memory</code>. That breadcrumb is sent once per session, and the footprint value is truncated in Sentry.</td>
+        <td>A timestamp for the warning. Not a memory curve.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>What this leaves undecided</h2>
+  <p>
+    “Still high at the next Start Recording” is measured. The first sample of the next recording is a real footprint, often 1.9–3.2 GB.
+    “Climbed while browsing after End Visit” is a choice between the two dashed lines.
+    The same is true of “grew during pause”: the pause sample and the resume sample differ by about a gigabyte in one of the trails, and the minute in between was not sampled.
+  </p>
+  <p>
+    A kill one to eight minutes after End Visit is timed from navigation crumbs. That says when the process died.
+    It does not say whether footprint was flat, rising, or already at the ceiling.
+  </p>
+
+  <h2>The addition that closes it</h2>
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 960 168" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="fixTitle">
+      <title id="fixTitle">Same sampler, left running through pause and for about eight minutes after End Visit</title>
+      <text x="8" y="20" font-size="13" font-weight="700" fill="#1f2937">Same breadcrumb, left running</text>
+      <text x="230" y="20" font-size="12" fill="#52606d">phase tag on each sample: recording, paused, after_end</text>
+
+      <text x="8" y="58" font-size="11" fill="#52606d">now</text>
+      <rect x="56" y="46" width="250" height="18" rx="3" fill="#1a7f52"/>
+      <rect x="306" y="46" width="140" height="18" rx="3" fill="#f6f7f9" stroke="#e2e5ea"/>
+      <rect x="446" y="46" width="150" height="18" rx="3" fill="#1a7f52"/>
+      <rect x="596" y="46" width="300" height="18" rx="3" fill="#f6f7f9" stroke="#e2e5ea"/>
+      <g font-size="10" fill="#ffffff">
+        <text x="181" y="58" text-anchor="middle">recording</text>
+        <text x="521" y="58" text-anchor="middle">recording</text>
+      </g>
+      <g font-size="10" fill="#52606d">
+        <text x="376" y="58" text-anchor="middle">pause</text>
+        <text x="746" y="58" text-anchor="middle">after End Visit</text>
+      </g>
+
+      <text x="8" y="108" font-size="11" fill="#52606d">add</text>
+      <rect x="56" y="96" width="250" height="18" rx="3" fill="#1a7f52"/>
+      <rect x="306" y="96" width="140" height="18" rx="3" fill="#2f6fed"/>
+      <rect x="446" y="96" width="150" height="18" rx="3" fill="#1a7f52"/>
+      <rect x="596" y="96" width="300" height="18" rx="3" fill="#2f6fed"/>
+      <g font-size="10" fill="#ffffff">
+        <text x="181" y="108" text-anchor="middle">recording</text>
+        <text x="376" y="108" text-anchor="middle">paused</text>
+        <text x="521" y="108" text-anchor="middle">recording</text>
+        <text x="746" y="108" text-anchor="middle">after_end · ~8 min</text>
+      </g>
+
+      <text x="56" y="146" font-size="12" fill="#52606d">Stop early if a new recording starts. No new metric. The two dashed lines stop being interchangeable.</text>
+    </svg>
+  </div>
+
+  <h2>Where one packet goes</h2>
+  <p>
+    On iOS the mic tap hands off a small native buffer. Dart accumulates packets until the flush, then builds a WAV and an encrypted copy. The flush writes that copy into SQLite, and the upload reads one chunk back. The Dart copies live inside <code>dart_heap_mb</code> together. This is the path, not a measurement of the 2,743 MB.
+  </p>
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 960 456" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="flowTitle flowDesc">
+      <title id="flowTitle">Audio packet flow from the native tap through SQLite to upload</title>
+      <desc id="flowDesc">A native PCM buffer is converted and handed to Flutter. Dart appends packets until flush, builds a WAV and an encrypted copy, writes that copy through SQLite to a file, then reads one chunk back for upload.</desc>
+      <defs>
+        <marker id="flowArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#8a94a6"/>
+        </marker>
+      </defs>
+
+      <text x="8" y="22" font-size="12" font-weight="700" fill="#52606d">NATIVE</text>
+      <text x="72" y="22" font-size="12" fill="#8a94a6">gone when the callback returns, except up to 30 packets queued for Flutter</text>
+
+      <rect x="8" y="36" width="200" height="64" rx="8" fill="#52606d"/>
+      <text x="108" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Mic tap</text>
+      <text x="108" y="78" text-anchor="middle" font-size="11" fill="#e6e9ee">AVAudioPCMBuffer</text>
+
+      <line x1="208" y1="68" x2="236" y2="68" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+
+      <rect x="244" y="36" width="210" height="64" rx="8" fill="#52606d"/>
+      <text x="349" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Converted PCM</text>
+      <text x="349" y="78" text-anchor="middle" font-size="11" fill="#e6e9ee">int16, one buffer</text>
+
+      <line x1="454" y1="68" x2="482" y2="68" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+
+      <rect x="490" y="36" width="220" height="64" rx="8" fill="#52606d"/>
+      <text x="600" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Queued for Flutter</text>
+      <text x="600" y="78" text-anchor="middle" font-size="11" fill="#e6e9ee">at most 30, extras dropped</text>
+
+      <line x1="600" y1="100" x2="600" y2="132" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+      <text x="612" y="122" font-size="11" fill="#52606d">copy into Dart</text>
+
+      <text x="8" y="158" font-size="12" font-weight="700" fill="#2f6fed">DART HEAP</text>
+      <text x="96" y="158" font-size="12" fill="#8a94a6">one number, if we add dart_heap_mb. These boxes are not separate fields.</text>
+
+      <rect x="8" y="172" width="168" height="72" rx="8" fill="#2f6fed"/>
+      <text x="92" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">_audioBuffer</text>
+      <text x="92" y="214" text-anchor="middle" font-size="11" fill="#eaf1ff">packets until flush</text>
+      <text x="92" y="230" text-anchor="middle" font-size="11" fill="#eaf1ff">about every 30s</text>
+
+      <line x1="176" y1="208" x2="204" y2="208" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+
+      <rect x="212" y="172" width="168" height="72" rx="8" fill="#2f6fed"/>
+      <text x="296" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">WAV copy</text>
+      <text x="296" y="214" text-anchor="middle" font-size="11" fill="#eaf1ff">chunkData</text>
+      <text x="296" y="230" text-anchor="middle" font-size="11" fill="#eaf1ff">built at flush</text>
+
+      <line x1="380" y1="208" x2="408" y2="208" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+
+      <rect x="416" y="172" width="188" height="72" rx="8" fill="#2f6fed"/>
+      <text x="510" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Encrypted copy</text>
+      <text x="510" y="214" text-anchor="middle" font-size="11" fill="#eaf1ff">another Uint8List</text>
+      <text x="510" y="230" text-anchor="middle" font-size="11" fill="#eaf1ff">while uploading</text>
+
+      <line x1="604" y1="208" x2="632" y2="208" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+
+      <rect x="640" y="172" width="200" height="72" rx="8" fill="#ffffff" stroke="#1a7f52" stroke-width="1.5"/>
+      <text x="740" y="196" text-anchor="middle" font-size="12" font-weight="700" fill="#1a7f52">Upload</text>
+      <text x="740" y="214" text-anchor="middle" font-size="11" fill="#52606d">reads one chunk back</text>
+      <text x="740" y="230" text-anchor="middle" font-size="11" fill="#52606d">then fileData is cleared</text>
+
+      <polyline points="510,244 510,300 133,300 133,318" fill="none" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+      <text x="522" y="292" font-size="11" fill="#52606d">insert the encrypted chunk</text>
+
+      <text x="8" y="292" font-size="12" font-weight="700" fill="#52606d">SQLITE</text>
+      <text x="68" y="292" font-size="12" fill="#8a94a6">same app process. The file is on disk, not in external_mb.</text>
+
+      <rect x="8" y="326" width="250" height="64" rx="8" fill="#52606d"/>
+      <text x="133" y="350" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Page cache</text>
+      <text x="133" y="368" text-anchor="middle" font-size="11" fill="#e6e9ee">about 2 MB · internal_mb</text>
+
+      <line x1="258" y1="358" x2="286" y2="358" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+
+      <rect x="294" y="326" width="250" height="64" rx="8" fill="#ffffff" stroke="#52606d" stroke-width="1.5"/>
+      <text x="419" y="350" text-anchor="middle" font-size="12" font-weight="700" fill="#1f2937">WAL file</text>
+      <text x="419" y="368" text-anchor="middle" font-size="11" fill="#52606d">on disk · not RAM</text>
+
+      <line x1="544" y1="358" x2="572" y2="358" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#flowArrow)"/>
+
+      <rect x="580" y="326" width="300" height="64" rx="8" fill="#2f6fed"/>
+      <text x="730" y="350" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Read one chunk back</text>
+      <text x="730" y="368" text-anchor="middle" font-size="11" fill="#eaf1ff">about 1 MB · then fileData = null</text>
+
+      <text x="8" y="422" font-size="12" fill="#52606d">16 kHz, 16-bit mono is about 2 MB per minute. A 30s flush is about 1 MB, and the WAV plus ciphertext is a small multiple of that.</text>
+      <text x="8" y="440" font-size="12" fill="#52606d">The code shows these copies exist. It does not show that they are the 300–500 MB/min climb.</text>
+    </svg>
+    <div class="legend">
+      <span><i class="swatch" style="background:#52606d"></i> iOS native, short-lived</span>
+      <span><i class="swatch" style="background:#2f6fed"></i> Dart objects, inside <code>dart_heap_mb</code></span>
+      <span><i class="swatch" style="background:#ffffff;border:1px solid #52606d"></i> SQLite file on disk, not <code>external_mb</code></span>
+      <span><i class="swatch" style="background:#ffffff;border:1px solid #1a7f52"></i> upload, then the blob column is cleared</span>
+    </div>
+  </div>
+
+  <h2>What one sample can see</h2>
+  <p>
+    One <code>recording_heap_sample</code>. <code>internal_mb</code> is 2,743 MB.
+    <code>rss_mb</code> is 2,815, which is that plus <code>external_mb</code> (71 MB).
+    <code>phys_footprint_mb</code> is 2,884. The kernel does not say how much of the 2,743 is the Dart heap or audio.
+  </p>
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="splitTitle splitDesc">
+      <title id="splitTitle">AS-IS memory sample versus a sample that names the Dart heap and audio buffers</title>
+      <desc id="splitDesc">The AS-IS internal bar is one measured 2743 MB block. The TO-BE bar is the same total, with dart_heap_mb and audio_buffered_mb marked inside it and no sizes on those slices.</desc>
+      <defs>
+        <pattern id="unknownSlice" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(35)">
+          <line x1="0" y1="0" x2="0" y2="8" stroke="#c5d4f7" stroke-width="3"/>
+        </pattern>
+        <pattern id="unknownSliceAmber" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(35)">
+          <line x1="0" y1="0" x2="0" y2="8" stroke="#f0d7a6" stroke-width="3"/>
+        </pattern>
+        <pattern id="remainderDots" patternUnits="userSpaceOnUse" width="6" height="6">
+          <circle cx="1.5" cy="1.5" r="0.8" fill="#c5cad3"/>
+        </pattern>
+        <clipPath id="toBeBar">
+          <rect x="508" y="48" width="404" height="72" rx="8"/>
+        </clipPath>
+      </defs>
+
+      <!-- column titles -->
+      <text x="48" y="28" font-size="13" font-weight="700" fill="#1f2937">AS-IS</text>
+      <text x="108" y="28" font-size="12" fill="#52606d">internal_mb is one number</text>
+      <text x="508" y="28" font-size="13" font-weight="700" fill="#1f2937">TO-BE</text>
+      <text x="572" y="28" font-size="12" fill="#52606d">same total, two named parts</text>
+
+      <!-- AS-IS bar -->
+      <rect x="48" y="48" width="420" height="72" rx="8" fill="#2f6fed"/>
+      <text x="258" y="80" text-anchor="middle" font-size="13" font-weight="700" fill="#ffffff">internal_mb</text>
+      <text x="258" y="100" text-anchor="middle" font-size="12" fill="#eaf1ff">2,743 MB</text>
+
+      <!-- TO-BE bar: same width, dashed cuts, no slice sizes -->
+      <g clip-path="url(#toBeBar)">
+        <rect x="508" y="48" width="404" height="72" fill="#f4f7ff"/>
+        <rect x="508" y="48" width="150" height="72" fill="url(#unknownSlice)"/>
+        <rect x="658" y="48" width="150" height="72" fill="url(#unknownSliceAmber)"/>
+        <rect x="808" y="48" width="104" height="72" fill="url(#remainderDots)"/>
+        <line x1="658" y1="48" x2="658" y2="120" stroke="#2f6fed" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line x1="808" y1="48" x2="808" y2="120" stroke="#8a94a6" stroke-width="1.5" stroke-dasharray="4 3"/>
+      </g>
+      <rect x="508" y="48" width="404" height="72" rx="8" fill="none" stroke="#2f6fed" stroke-width="1.5"/>
+      <text x="583" y="78" text-anchor="middle" font-size="11" font-weight="700" fill="#1f2937">dart_heap_mb</text>
+      <text x="583" y="96" text-anchor="middle" font-size="12" fill="#52606d">—</text>
+      <text x="733" y="78" text-anchor="middle" font-size="11" font-weight="700" fill="#1f2937">audio_buffered_mb</text>
+      <text x="733" y="96" text-anchor="middle" font-size="12" fill="#52606d">—</text>
+      <text x="860" y="84" text-anchor="middle" font-size="11" fill="#52606d">rest</text>
+      <text x="860" y="100" text-anchor="middle" font-size="12" fill="#52606d">—</text>
+
+      <text x="710" y="142" text-anchor="middle" font-size="11" fill="#8a94a6">same 2,743 MB. Slice widths are not measurements.</text>
+
+      <!-- shared outer fields, both columns -->
+      <g font-size="12" fill="#1f2937">
+        <text x="48" y="178">external_mb</text>
+        <text x="200" y="178" fill="#52606d">71 MB · file-backed, outside internal</text>
+        <text x="508" y="178">external_mb</text>
+        <text x="660" y="178" fill="#52606d">71 MB · unchanged</text>
+
+        <text x="48" y="206">compressed_mb</text>
+        <text x="200" y="206" fill="#52606d">15 MB · not inside rss</text>
+        <text x="508" y="206">compressed_mb</text>
+        <text x="660" y="206" fill="#52606d">15 MB · unchanged</text>
+
+        <text x="48" y="234">rss_mb</text>
+        <text x="200" y="234" fill="#52606d">2,815 = 2,743 + 71</text>
+        <text x="508" y="234">rss_mb</text>
+        <text x="660" y="234" fill="#52606d">2,815 · unchanged</text>
+
+        <text x="48" y="262">phys_footprint_mb</text>
+        <text x="200" y="262" fill="#52606d">2,884 · what jetsam kills on</text>
+        <text x="508" y="262">phys_footprint_mb</text>
+        <text x="660" y="262" fill="#52606d">2,884 · unchanged</text>
+      </g>
+
+      <line x1="48" y1="286" x2="912" y2="286" stroke="#e2e5ea"/>
+
+      <text x="48" y="318" font-size="12" fill="#52606d">AS-IS cannot tell a growing Dart heap from audio buffers sitting in the same 2,743 MB.</text>
+      <text x="48" y="340" font-size="12" fill="#52606d">TO-BE names both. They do not have to add up to 2,743. The rest of internal stays unsplit.</text>
+    </svg>
+    <div class="legend">
+      <span><i class="swatch" style="background:#2f6fed"></i> measured <code>internal_mb</code></span>
+      <span><i class="swatch" style="background:#eaf1ff;border:1px solid #2f6fed"></i> <code>dart_heap_mb</code>, size unknown</span>
+      <span><i class="swatch" style="background:#fff6e5;border:1px solid #b7791f"></i> <code>audio_buffered_mb</code>, size unknown</span>
+      <span><i class="swatch" style="background:#f6f7f9;border:1px solid #e2e5ea"></i> rest of <code>internal_mb</code>, still unsplit</span>
+    </div>
+  </div>
+
+  <footer>
+    Sampler behavior is from <span class="mono">lib/src/features/record/services/resource_monitoring_service.dart</span>
+    and the pause / End Visit call sites in the recording notifiers.
+    The 1–8 minute kill window and the footprint band are from the 3.42.1 root-cause sample.
+    The packet path is from <span class="mono">packages/recorder/ios/Classes/RecorderPlugin.swift</span>
+    and <span class="mono">chunking_recording_state_notifier.dart</span>.
+  </footer>
+
+</div>
+</body>
+</html>

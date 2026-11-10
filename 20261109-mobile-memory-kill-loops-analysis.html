@@ -1,0 +1,265 @@
+---
+title: "Mobile memory-kill loops: how big, and is it the log cache? (2026-11-09)"
+description: "Repeat-kill devices on iOS and Android climb to the memory ceiling and die in a loop; sizing and the torn GCP log cache hypothesis."
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile memory-kill loops: how big, and is it the log cache? (2026-11-09)</title>
+<style>
+  :root{--ink:#1f2937;--sub:#52606d;--bg:#fff;--panel:#f6f7f9;--border:#e2e5ea;--blue:#2f6fed;--blue-bg:#eaf1ff;--amber:#b7791f;--amber-bg:#fff6e5;--green:#1a7f52;--green-bg:#e9f7ef;--red:#c0392b;--red-bg:#fdecea;--grey:#9aa5b1}
+  *{box-sizing:border-box}
+  body{margin:0;padding:40px 24px 90px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:27px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:14px;margin-bottom:22px}
+  h2{font-size:19px;margin:44px 0 10px;padding-top:6px;border-top:1px solid var(--border)}
+  h3{font-size:15px;margin:22px 0 6px}
+  p{margin:8px 0}
+  .nav{position:sticky;top:0;background:#fffffff2;backdrop-filter:blur(4px);padding:8px 0;margin:0 0 14px;border-bottom:1px solid var(--border);font-size:13px;z-index:5}
+  .nav a{margin-right:14px;color:var(--blue);text-decoration:none}
+  .box{border:1px solid var(--border);background:var(--panel);border-radius:8px;padding:14px 16px;margin:12px 0}
+  .box.blue{background:var(--blue-bg);border-color:#c7d9fb}.box.amber{background:var(--amber-bg);border-color:#f0dcb0}.box.green{background:var(--green-bg);border-color:#bfe5cf}.box.red{background:var(--red-bg);border-color:#f3c3be}
+  .tag{display:inline-block;font-size:11px;font-weight:600;border-radius:10px;padding:1px 8px;margin-right:6px;vertical-align:1px}
+  .tag.ok{background:var(--green-bg);color:var(--green)}.tag.maybe{background:var(--amber-bg);color:var(--amber)}.tag.no{background:var(--red-bg);color:var(--red)}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+  th,td{border:1px solid var(--border);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:600}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:14px 0}
+  .kpi{border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:#fff}
+  .kpi b{display:block;font-size:26px;line-height:1.15}
+  .kpi span{font-size:13px;color:var(--sub)}
+  svg text{font-family:inherit}
+  .chart{width:100%;overflow:visible}
+  .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;margin:4px 0 2px}
+  .legend label{cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+  .sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+  .ctl{display:grid;grid-template-columns:260px 1fr 56px;gap:10px;align-items:center;font-size:14px;margin:7px 0}
+  .ctl input[type=range]{width:100%}
+  button{font:inherit;font-size:13px;border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;margin-right:6px}
+  button:hover{background:var(--blue-bg)}
+  .small{font-size:13px;color:var(--sub)}
+  code{background:var(--panel);padding:1px 5px;border-radius:4px;font-size:13px}
+  ul{margin:6px 0 6px 20px;padding:0}
+  #tip{position:fixed;pointer-events:none;background:#1f2937;color:#fff;font-size:12px;padding:5px 8px;border-radius:5px;display:none;z-index:20;max-width:260px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Mobile memory-kill loops: how big, and is it the log cache?</h1>
+<div class="meta">2026-11-09 &middot; scribe-mobile (iOS and Android) &middot; Sentry, scribe_events, Cloud Logging &middot; accounts and users are anonymised</div>
+
+<div class="nav"><a href="#summary">Summary</a><a href="#loop">What a loop looks like</a><a href="#conc">How concentrated</a><a href="#share">Impact calculator</a><a href="#cause">Is it the log cache?</a><a href="#ruled">Ruled out</a><a href="#next">Next steps</a></div>
+
+<h2 id="summary" style="border-top:none;margin-top:8px">Summary</h2>
+<div class="kpis">
+  <div class="kpi"><b>57&ndash;74%</b><span>of iOS memory-kill events come from devices whose memory climbs to the ceiling before the kill (57% confirmed, up to 74% if the rest of the top 25 users behave the same).</span></div>
+  <div class="kpi"><b>~0.26&ndash;0.33 pts</b><span>of the 0.45% of recordings iOS memory-kill rate (last full week, 10/26).</span></div>
+  <div class="kpi"><b>1 phone = 23%</b><span>of all Android app kills that week (74 of 324), restarting about every 7 minutes at ~4.2 GB.</span></div>
+  <div class="kpi"><b>Cause: open</b><span>The torn GCP log cache is the leading suspect (fix merged 11/9, not released). Not confirmed.</span></div>
+</div>
+<div class="box blue">
+<span class="tag ok">Confirmed</span> A small set of devices on both platforms are stuck in a loop: memory climbs from ~300 MB to the ceiling (about 3.3 GB on iOS, 4.2 GB on Android), the app dies, relaunches and climbs again. 17 of the 17 top iOS repeat-kill users tested show the climb.<br>
+<span class="tag maybe">Likely</span> The remaining 8 top-25 iOS users behave the same; the iOS memory-kill rate in the weekly report is driven mostly by these devices.<br>
+<span class="tag no">Unknown</span> Whether the torn GCP log cache is what keeps them looping. It matches the symptoms, but nothing has reproduced it yet.
+</div>
+
+<h2 id="loop">1. What a loop looks like</h2>
+<p>Each recording logs the app&rsquo;s memory every 30 seconds. On one Android phone (one account, one recording, one hour) the memory climbs about <b>300 MB every 30 seconds</b> to ~4.2 GB, the process dies, relaunches within a minute, and starts again. The recording keeps its identity across the 7 restarts.</p>
+<div class="legend" id="leg-saw"></div>
+<svg class="chart" id="ch-saw" viewBox="0 0 960 330"></svg>
+<p class="small">Android, 11/9 21:02&ndash;21:59 UTC. Shaded bands are separate app runs. Hover a point for its value.</p>
+
+<p>iOS shows the same shape with a lower ceiling. Each line is one user&rsquo;s memory in the minutes leading up to an iOS memory kill (from the memory samples Sentry keeps with each kill event). Each line starts at that user&rsquo;s first reading in the event, so they start at different heights:</p>
+<div class="legend" id="leg-ios"></div>
+<svg class="chart" id="ch-ios" viewBox="0 0 960 330"></svg>
+<p class="small">A normal recording stays around 250&ndash;300 MB (sampled fleet median 262 MB, 90th percentile 294 MB). The dashed line marks where iOS appears to end the app.</p>
+
+<h2 id="conc">2. How concentrated are the kills?</h2>
+<h3>Repeat kills per device, 11/2&ndash;11/8 (<code>APP_KILLED_DETECTED</code>; a loop hour is 3+ kills in one hour)</h3>
+<table>
+<tr><th>Platform</th><th class="n">Accounts with a kill</th><th class="n">Total kills</th><th class="n">Loop accounts</th><th class="n">Kills in loop hours</th></tr>
+<tr><td>iOS</td><td class="n">1,314</td><td class="n">4,285</td><td class="n">87 (6.6%)</td><td class="n">661 (15%)</td></tr>
+<tr><td>Android</td><td class="n">93</td><td class="n">324</td><td class="n">2</td><td class="n">66 (20%)</td></tr>
+</table>
+<p>The top 56 iOS accounts hold 1,362 kills (32% of all iOS kills); 37 of them have loop hours. On Android one account has 74 of 324 kills (23%). Kills include non-memory causes (swipe-away, OS stopping the service), so these shares are an upper bound for loops.</p>
+
+<h3>iOS memory-kill events by user (Sentry, 7 days to 11/9: 1,146 events from 86 users)</h3>
+<p>The top 25 users produce <b>851 events (74%)</b>; the other 61 users produce 295 (26%). Bars are colored by whether we have checked that user&rsquo;s memory climb.</p>
+<div class="legend" id="leg-top"></div>
+<svg class="chart" id="ch-top" viewBox="0 0 960 300"></svg>
+
+<h3>iOS repeat-kill accounts that recorded on 11/9 (18:00&ndash;24:00 UTC): peak memory</h3>
+<p>All 15 accounts with data peaked above 1,000 MB; 11 of 15 peaked at 3.2&ndash;3.4 GB. The green dashed line at 300 MB is the fleet&rsquo;s 90th percentile in the same app (median 262 MB).</p>
+<svg class="chart" id="ch-b2" viewBox="0 0 960 360"></svg>
+
+<h2 id="share">3. Impact calculator</h2>
+<p>How much of the iOS memory-kill number comes from climbing devices depends on what we assume about the users we haven&rsquo;t tested. Move the sliders; the confirmed part (652 events from 17 users) is fixed.</p>
+<div class="box">
+  <div class="ctl"><label for="p1">Untested top-25 users (199 events) that climb</label><input type="range" id="p1" min="0" max="100" value="100"><output id="o1">100%</output></div>
+  <div class="ctl"><label for="p2">Other 61 users (295 events) that climb</label><input type="range" id="p2" min="0" max="100" value="0"><output id="o2">0%</output></div>
+  <div class="ctl"><label for="q">Share of climbers caused by the torn log cache</label><input type="range" id="q" min="0" max="100" value="50"><output id="oq">50%</output></div>
+  <div class="ctl"><label for="rate">iOS memory-kill rate (% of recordings)</label><input type="range" id="rate" min="0.2" max="0.8" step="0.01" value="0.45"><output id="or">0.45%</output></div>
+  <div style="margin-top:8px"><button data-p="0,0">Confirmed only</button><button data-p="100,0">Observed hit rate (17 of 17)</button><button data-p="100,30">Generous</button></div>
+</div>
+<div class="kpis">
+  <div class="kpi"><b id="r-share">&ndash;</b><span>of iOS memory-kill events from climbing devices</span></div>
+  <div class="kpi"><b id="r-pts">&ndash;</b><span>percentage points of the iOS memory-kill rate</span></div>
+  <div class="kpi"><b id="r-cache">&ndash;</b><span>share attributable to the torn log cache under your slider</span></div>
+</div>
+<svg class="chart" id="ch-share" viewBox="0 0 960 70"></svg>
+<p class="small">The third slider is a judgement, not a measurement: nothing yet tells us how many of these devices are kept alive by the log cache. The test-phone repro and the post-release re-run settle it.</p>
+
+<h2 id="cause">4. Is it the torn GCP log cache?</h2>
+<div class="box amber"><b>The hypothesis.</b> scribe-mobile PR #6488 (merged to <code>develop</code> 11/9, not in 3.43.1) fixes a bug where a kill mid-write cuts the on-disk log cache file inside a multi-byte character. The strict read then threw on every flush, each failure logged an error that fed back into the cache, memory grew until the OS killed the app, and the device shipped no client logs. A kill tears the file, the next launch reads the torn file and climbs, so a device can stay in the loop. The PR documents this on iOS; the same trigger exists on Android.</div>
+<table>
+<tr><th>Evidence</th><th>Reading</th></tr>
+<tr><td>Climb starts shortly after launch, regardless of screen or audio; Java and native heaps flat (growth is on the Dart/other side)</td><td><span class="tag ok">Fits</span></td></tr>
+<tr><td>Loop devices ship far fewer client logs: Android account ~552 entries in 6 h vs ~11,300 median for healthy accounts; iOS climbing accounts median 2,707 vs 13,000; 4 of 15 climbing iOS accounts shipped zero while actively recording</td><td><span class="tag ok">Fits</span> <span class="tag maybe">not conclusive</span></td></tr>
+<tr><td>11 of 15 climbing iOS accounts did ship some logs; windows and activity differ per account; controls hit the 20,000 cap</td><td><span class="tag maybe">Weakens</span></td></tr>
+<tr><td>The cache manager&rsquo;s own error lines show up for only 1 of 31 loop iOS accounts</td><td><span class="tag maybe">No signal</span> (those errors go into the same stuck cache)</td></tr>
+<tr><td>The fix is newer than the builds on these devices, and nothing has been reproduced or re-measured after it</td><td><span class="tag no">Untested</span></td></tr>
+</table>
+<h3>Log entries shipped per account, 11/9 18:00&ndash;24:00 UTC (median; capped at 20,000)</h3>
+<svg class="chart" id="ch-logs" viewBox="0 0 960 250"></svg>
+
+<h2 id="ruled">5. What we ruled out</h2>
+<table>
+<tr><th>Candidate</th><th>Why not</th></tr>
+<tr><td>Audio capture or buffering</td><td>Both the loop account and a healthy one flush an identical 2.64 MB chunk every 30 s (44.1 kHz mono). The recording&rsquo;s whole audio is about 5 MB a minute; memory grows ~600 MB a minute.</td></tr>
+<tr><td>Upload backlog or failed flushes</td><td>107 of 107 chunks uploaded on schedule during the loop.</td></tr>
+<tr><td>An event storm</td><td>No event type fires at an abnormal rate (about 2 chunk events a minute, normal).</td></tr>
+<tr><td>Reading all saved audio on each restart</td><td>The first cycle of the recording climbed as fast as later ones, with only a few minutes of audio saved.</td></tr>
+<tr><td>The phone model alone</td><td>A second phone of the same family on the same build held 290&ndash;340 MB across several recordings.</td></tr>
+<tr><td>A fleet-wide leak</td><td>A quarter of Android accounts for an hour: only the loop account climbs; everyone else peaks under ~470 MB.</td></tr>
+<tr><td>Ordinary Java heap OutOfMemory</td><td>The Java heap stays at 6&ndash;30 MB during the climb. Sentry&rsquo;s OutOfMemory errors catch about 1 of 7 deaths on the loop phone, so they undercount.</td></tr>
+</table>
+
+<h2 id="next">6. How to confirm, and what to do next</h2>
+<ol>
+<li><b>Test-phone repro (decisive, hours).</b> On a debug build of 3.43.1, append an incomplete emoji to the log cache file, relaunch, and watch memory. A climb of ~10 MB/s confirms it; then repeat on <code>develop</code> with PR #6488 and it should stay flat.</li>
+<li><b>Re-measure after the fix ships.</b> Re-run the repeat-kill count, the memory-peak check on the same accounts, and the log-volume count. Peaks should fall to about 300 MB and log volume should recover. The fixed code also logs &ldquo;Skipped N malformed cache entries&rdquo;, which counts devices that actually had a torn cache.</li>
+<li><b>Ask which release carries PR #6488.</b></li>
+<li><b>Android exit reasons (LLM-21376).</b> Once shipped, the kill event records why the process died, replacing today&rsquo;s guess for Android.</li>
+<li><b>Optional:</b> check the 8 untested top-25 iOS users (17% of events) the same way.</li>
+</ol>
+<div class="box green"><b>For the weekly report:</b> &ldquo;A few dozen repeat-kill devices account for roughly 57&ndash;74% of iOS memory kills; a candidate fix is merged but not released, and the cause is not yet confirmed.&rdquo; The Android OOM row measures mostly one phone.</div>
+
+<h3>Method and caveats</h3>
+<ul class="small">
+<li>Kill counts: Sentry iOS memory-kill issue (7 days to 11/9) and <code>APP_KILLED_DETECTED</code> in scribe_events (11/2&ndash;11/8). They use different definitions, so shares are compared within a source.</li>
+<li>Memory samples: the app&rsquo;s 30-second resource samples; iOS reports physical footprint, Android resident memory, so each platform is compared with itself.</li>
+<li>The sampled checks cover one hour or one 6-hour window on 11/9 and a subset of accounts. &ldquo;Untested&rdquo; means not checked, not clean.</li>
+<li>Log counts are entry counts per account from Cloud Logging (no content read); capped at 20,000.</li>
+<li>Account and user ids, recording ids and device ids are replaced by labels in this page.</li>
+</ul>
+</div>
+<div id="tip"></div>
+
+<script>
+const DATA = {"saw": [[0.0, 351, 0], [0.5, 770, 0], [1.0, 1136, 0], [1.5, 1478, 0], [2.0, 1779, 0], [2.5, 2123, 0], [3.0, 2389, 0], [3.5, 2709, 0], [4.0, 3051, 0], [4.5, 3279, 0], [5.0, 3569, 0], [5.5, 3852, 0], [6.0, 4102, 0], [6.57, 289, 1], [7.07, 693, 1], [7.57, 1031, 1], [8.07, 1372, 1], [8.57, 1693, 1], [9.07, 2005, 1], [9.57, 2342, 1], [10.07, 2638, 1], [10.57, 2891, 1], [11.07, 3179, 1], [11.57, 3420, 1], [12.07, 3695, 1], [12.57, 3993, 1], [13.07, 4127, 1], [13.79, 289, 2], [14.29, 669, 2], [14.79, 1031, 2], [15.29, 1346, 2], [15.79, 1671, 2], [16.29, 1960, 2], [16.79, 2262, 2], [17.29, 2476, 2], [17.79, 2749, 2], [18.29, 3032, 2], [18.79, 3276, 2], [19.29, 3511, 2], [19.79, 3796, 2], [20.29, 4034, 2], [20.9, 4282, 2], [21.28, 293, 3], [21.78, 684, 3], [22.28, 1024, 3], [22.78, 1344, 3], [23.28, 1664, 3], [23.78, 1985, 3], [24.28, 2298, 3], [24.78, 2611, 3], [25.28, 2888, 3], [25.78, 3163, 3], [26.28, 3430, 3], [26.78, 3702, 3], [27.28, 3963, 3], [27.78, 4169, 3], [27.78, 4169, 3], [28.18, 288, 4], [28.68, 695, 4], [29.18, 1010, 4], [29.68, 1331, 4], [30.18, 1628, 4], [30.68, 1916, 4], [31.18, 2196, 4], [31.68, 2470, 4], [32.18, 2719, 4], [32.68, 2941, 4], [33.18, 3252, 4], [33.68, 3506, 4], [34.18, 3766, 4], [34.68, 4013, 4], [35.18, 4273, 4], [35.18, 4273, 4], [35.51, 291, 5], [36.01, 672, 5], [36.51, 965, 5], [37.01, 1239, 5], [37.51, 1533, 5], [38.01, 1814, 5], [38.51, 2107, 5], [39.01, 2346, 5], [39.51, 2619, 5], [40.01, 2872, 5], [40.51, 3130, 5], [41.01, 3396, 5], [41.51, 3657, 5], [42.01, 3913, 5], [42.51, 4186, 5], [43.51, 287, 6], [44.01, 668, 6], [44.51, 1020, 6], [45.01, 1329, 6], [45.51, 1596, 6], [46.01, 1891, 6], [46.51, 2163, 6], [47.01, 2421, 6], [47.51, 2682, 6], [48.01, 2924, 6], [48.51, 3204, 6], [49.01, 3442, 6], [49.51, 3747, 6], [50.01, 3973, 6], [50.51, 4217, 6], [51.41, 291, 7], [51.91, 646, 7], [52.41, 1001, 7], [52.91, 1258, 7], [53.41, 1545, 7], [53.91, 1776, 7], [54.41, 2070, 7], [54.91, 2338, 7], [55.41, 2611, 7], [55.91, 2862, 7], [56.41, 3097, 7], [56.91, 3357, 7], [57.41, 3565, 7]], "iosTraj": {"iOS user 1": [[0.0, 498], [0.51, 768], [1.01, 1010], [1.51, 1162], [2.01, 1361], [2.5, 1494]], "iOS user 2": [[0.0, 2275], [0.65, 2458], [1.15, 2642], [4.02, 2920], [4.65, 3102], [5.15, 3245], [5.65, 3324]], "iOS user 3": [[0.0, 2742], [0.5, 2918], [1.0, 3013], [1.5, 3144], [2.0, 3245]], "iOS user 4": [[0.0, 2776], [0.5, 2903], [1.0, 3072], [1.5, 3196], [2.0, 3312]]}, "b2": [{"label": "iOS account 1", "peak": 3405, "recs": 8, "slope": 239}, {"label": "iOS account 2", "peak": 3381, "recs": 8, "slope": 0}, {"label": "iOS account 3", "peak": 3365, "recs": 7, "slope": 260}, {"label": "iOS account 4", "peak": 3353, "recs": 12, "slope": 666}, {"label": "iOS account 5", "peak": 3346, "recs": 6, "slope": 478}, {"label": "iOS account 6", "peak": 3330, "recs": 1, "slope": 0}, {"label": "iOS account 7", "peak": 3308, "recs": 17, "slope": 412}, {"label": "iOS account 8", "peak": 3307, "recs": 14, "slope": 852}, {"label": "iOS account 9", "peak": 3304, "recs": 4, "slope": 446}, {"label": "iOS account 10", "peak": 3296, "recs": 2, "slope": 64}, {"label": "iOS account 11", "peak": 3221, "recs": 6, "slope": 292}, {"label": "iOS account 12", "peak": 2897, "recs": 8, "slope": 228}, {"label": "iOS account 13", "peak": 1920, "recs": 2, "slope": 67}, {"label": "iOS account 14", "peak": 1865, "recs": 4, "slope": 0}, {"label": "iOS account 15", "peak": 1484, "recs": 1, "slope": 574}], "top25": [{"label": "user 1", "events": 81, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 2", "events": 59, "status": "climb confirmed (kill-event memory samples)"}, {"label": "user 3", "events": 57, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 4", "events": 53, "status": "climb confirmed (kill-event memory samples)"}, {"label": "user 5", "events": 48, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 6", "events": 45, "status": "not tested yet"}, {"label": "user 7", "events": 42, "status": "climb confirmed (kill-event memory samples)"}, {"label": "user 8", "events": 41, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 9", "events": 38, "status": "climb confirmed (kill-event memory samples)"}, {"label": "user 10", "events": 36, "status": "not tested yet"}, {"label": "user 11", "events": 35, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 12", "events": 32, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 13", "events": 31, "status": "climb confirmed (kill-event memory samples)"}, {"label": "user 14", "events": 29, "status": "not tested yet"}, {"label": "user 15", "events": 28, "status": "climb confirmed (kill-event memory samples)"}, {"label": "user 16", "events": 28, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 17", "events": 23, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 18", "events": 23, "status": "not tested yet"}, {"label": "user 19", "events": 21, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 20", "events": 20, "status": "not tested yet"}, {"label": "user 21", "events": 19, "status": "climb confirmed (memory readings per recording)"}, {"label": "user 22", "events": 17, "status": "not tested yet"}, {"label": "user 23", "events": 16, "status": "climb confirmed (kill-event memory samples)"}, {"label": "user 24", "events": 15, "status": "not tested yet"}, {"label": "user 25", "events": 14, "status": "not tested yet"}], "totals": {"events": 1146, "users": 86, "tail": 295, "rate": 0.451}};
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const tip = $("tip");
+function el(tag, attrs, parent, text){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!==undefined) e.textContent=text; if(parent) parent.appendChild(e); return e; }
+function showTip(ev, html){ tip.innerHTML=html; tip.style.display="block"; tip.style.left=(ev.clientX+12)+"px"; tip.style.top=(ev.clientY+12)+"px"; }
+function hideTip(){ tip.style.display="none"; }
+const fmt = n => Math.round(n).toLocaleString();
+const COLORS = ["#2f6fed","#c0392b","#1a7f52","#b7791f","#7b4fd6","#0e8aa8"];
+
+/* ---------- generic line chart ---------- */
+function lineChart(svg, o){
+  svg.innerHTML=""; const W=960,H=+svg.getAttribute("viewBox").split(" ")[3], m={l:56,r:16,t:12,b:38};
+  const pw=W-m.l-m.r, ph=H-m.t-m.b, X=x=>m.l+x/o.xmax*pw, Y=y=>m.t+ph-y/o.ymax*ph;
+  for(let i=0;i<=5;i++){ const y=o.ymax*i/5; el("line",{x1:m.l,x2:W-m.r,y1:Y(y),y2:Y(y),stroke:"#e2e5ea"},svg); el("text",{x:m.l-8,y:Y(y)+4,"text-anchor":"end","font-size":11,fill:"#52606d"},svg,fmt(y)); }
+  const xt=o.xticks||6; for(let i=0;i<=xt;i++){ const x=o.xmax*i/xt; el("text",{x:X(x),y:H-m.b+16,"text-anchor":"middle","font-size":11,fill:"#52606d"},svg,Math.round(x*10)/10); }
+  el("text",{x:m.l+pw/2,y:H-4,"text-anchor":"middle","font-size":12,fill:"#52606d"},svg,o.xlabel);
+  el("text",{x:14,y:m.t+ph/2,"text-anchor":"middle","font-size":12,fill:"#52606d",transform:`rotate(-90 14 ${m.t+ph/2})`},svg,o.ylabel);
+  (o.bands||[]).forEach(b=>el("rect",{x:X(b.x0),y:m.t,width:X(b.x1)-X(b.x0),height:ph,fill:b.fill},svg));
+  (o.hlines||[]).forEach(h=>{ el("line",{x1:m.l,x2:W-m.r,y1:Y(h.y),y2:Y(h.y),stroke:h.color,"stroke-dasharray":"5 4"},svg); el("text",{x:W-m.r-4,y:Y(h.y)-4,"text-anchor":"end","font-size":11,fill:h.color},svg,h.label); });
+  o.series.filter(s=>s.on!==false).forEach(s=>{
+    (s.segments||[s.points]).forEach(seg=>{ el("polyline",{points:seg.map(p=>X(p[0])+","+Y(p[1])).join(" "),fill:"none",stroke:s.color,"stroke-width":2,"stroke-linejoin":"round"},svg); });
+    s.points.forEach(p=>{ const c=el("circle",{cx:X(p[0]),cy:Y(p[1]),r:3.2,fill:s.color,"fill-opacity":.9},svg); c.addEventListener("mousemove",ev=>showTip(ev,`<b>${s.name}</b><br>${o.xname} ${p[0]} &middot; ${fmt(p[1])} MB`)); c.addEventListener("mouseleave",hideTip); });
+  });
+}
+
+/* ---------- Android sawtooth ---------- */
+(function(){
+  const saw=DATA.saw, ncyc=Math.max(...saw.map(p=>p[2]))+1, segs=[];
+  for(let c=0;c<ncyc;c++) segs.push(saw.filter(p=>p[2]===c).map(p=>[p[0],p[1]]));
+  const bands=segs.map((s,i)=>({x0:s[0][0],x1:i<segs.length-1?segs[i+1][0][0]:s[s.length-1][0],fill:i%2?"#f6f7f9":"#eaf1ff"}));
+  const series=[{name:"Android app memory",color:"#2f6fed",points:saw.map(p=>[p[0],p[1]]),segments:segs}];
+  function draw(){ lineChart($("ch-saw"),{xmax:60,ymax:4500,xlabel:"minutes into the hour",ylabel:"app memory (MB)",xname:"min",bands,series,hlines:[{y:4200,color:"#c0392b",label:"ceiling ~4.2 GB"},{y:300,color:"#9aa5b1",label:"typical ~300 MB"}]}); }
+  draw(); $("leg-saw").innerHTML=`<span><b>${ncyc}</b> app runs in 57 minutes (7 restarts); each climbs from ~290 MB to 4.1&ndash;4.3 GB, then dies.</span>`;
+})();
+
+/* ---------- iOS trajectories ---------- */
+(function(){
+  const names=Object.keys(DATA.iosTraj), series=names.map((n,i)=>({name:n,color:COLORS[i%COLORS.length],points:DATA.iosTraj[n],on:true}));
+  function draw(){ lineChart($("ch-ios"),{xmax:6,ymax:3600,xlabel:"minutes since the first memory reading",ylabel:"app memory (MB)",xname:"min",series,hlines:[{y:3300,color:"#c0392b",label:"iOS ceiling ~3.3 GB"},{y:290,color:"#9aa5b1",label:"typical ~290 MB"}]}); }
+  const lg=$("leg-ios"); names.forEach((n,i)=>{ const l=document.createElement("label"); l.innerHTML=`<input type="checkbox" checked><span class="sw" style="background:${COLORS[i%COLORS.length]}"></span>${n}`; l.querySelector("input").addEventListener("change",e=>{series[i].on=e.target.checked; draw();}); lg.appendChild(l); });
+  draw();
+})();
+
+/* ---------- generic horizontal bar chart ---------- */
+function barChart(svg,items,o){
+  svg.innerHTML=""; const W=960,H=+svg.getAttribute("viewBox").split(" ")[3], m={l:o.ml||110,r:60,t:6,b:22}, ph=H-m.t-m.b, pw=W-m.l-m.r, bh=ph/items.length*0.72, step=ph/items.length, X=v=>m.l+v/o.max*pw;
+  for(let i=0;i<=4;i++){ const v=o.max*i/4; el("line",{x1:X(v),x2:X(v),y1:m.t,y2:m.t+ph,stroke:"#eef0f3"},svg); el("text",{x:X(v),y:H-6,"text-anchor":"middle","font-size":11,fill:"#52606d"},svg,fmt(v)); }
+  items.forEach((it,i)=>{ const y=m.t+i*step+(step-bh)/2; el("text",{x:m.l-8,y:y+bh/2+4,"text-anchor":"end","font-size":11,fill:"#1f2937"},svg,it.label);
+    const r=el("rect",{x:m.l,y:y,width:Math.max(1,X(it.value)-m.l),height:bh,fill:it.color,rx:2},svg);
+    r.addEventListener("mousemove",ev=>showTip(ev,it.tip||`<b>${it.label}</b><br>${fmt(it.value)}`)); r.addEventListener("mouseleave",hideTip);
+    el("text",{x:X(it.value)+5,y:y+bh/2+4,"font-size":11,fill:"#52606d"},svg,fmt(it.value)); });
+  (o.vlines||[]).forEach(v=>{ el("line",{x1:X(v.x),x2:X(v.x),y1:m.t,y2:m.t+ph,stroke:v.color,"stroke-dasharray":"5 4"},svg); if(v.label) el("text",{x:X(v.x)+4,y:m.t+10,"font-size":11,fill:v.color},svg,v.label); });
+}
+
+/* ---------- top-25 users ---------- */
+(function(){
+  const col={"climb confirmed (memory readings per recording)":"#2f6fed","climb confirmed (kill-event memory samples)":"#1a7f52","not tested yet":"#9aa5b1"};
+  const T=DATA.top25, svg=$("ch-top"); svg.innerHTML=""; const W=960,H=300,m={l:40,r:12,t:8,b:44}, bw=(W-m.l-m.r)/T.length, ymax=90, Y=v=>m.t+(H-m.t-m.b)*(1-v/ymax);
+  for(let i=0;i<=3;i++){ const v=ymax*i/3; el("line",{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v),stroke:"#e2e5ea"},svg); el("text",{x:m.l-6,y:Y(v)+4,"text-anchor":"end","font-size":11,fill:"#52606d"},svg,Math.round(v)); }
+  T.forEach((t,i)=>{ const r=el("rect",{x:m.l+i*bw+2,y:Y(t.events),width:bw-4,height:Y(0)-Y(t.events),fill:col[t.status],rx:2},svg);
+    r.addEventListener("mousemove",ev=>showTip(ev,`<b>${t.label}</b><br>${t.events} kill events in 7 days<br>${t.status}`)); r.addEventListener("mouseleave",hideTip);
+    el("text",{x:m.l+i*bw+bw/2,y:H-m.b+14,"text-anchor":"middle","font-size":9,fill:"#52606d"},svg,i+1); });
+  el("text",{x:m.l+(W-m.l-m.r)/2,y:H-6,"text-anchor":"middle","font-size":12,fill:"#52606d"},svg,"top 25 users, ranked by kill events (events per user)");
+  $("leg-top").innerHTML=Object.keys(col).map(k=>`<span><span class="sw" style="background:${col[k]}"></span> ${k}</span>`).join("")+`<span class="small">events: confirmed 652 &middot; untested top-25 199 &middot; other 61 users 295</span>`;
+})();
+
+/* ---------- B2 peaks ---------- */
+(function(){
+  const items=DATA.b2.map(a=>({label:a.label,value:a.peak,color:a.peak>3000?"#c0392b":a.peak>1500?"#b7791f":"#2f6fed",tip:`<b>${a.label}</b><br>peak ${fmt(a.peak)} MB<br>${a.recs} recordings in the window<br>steepest climb ${fmt(a.slope)} MB/min`}));
+  barChart($("ch-b2"),items,{max:3600,ml:110,vlines:[{x:300,color:"#1a7f52",label:""}]});
+})();
+
+/* ---------- log volume ---------- */
+(function(){
+  const items=[
+    {label:"Android loop account",value:552,color:"#c0392b",tip:"<b>Android loop account</b><br>552 log entries in 6 h"},
+    {label:"Android healthy (median of 10)",value:11311,color:"#1a7f52",tip:"<b>Android healthy accounts</b><br>median 11,311 (4 at the cap, 4 inactive)"},
+    {label:"iOS climbing (median of 15)",value:2707,color:"#c0392b",tip:"<b>iOS climbing accounts</b><br>median 2,707; 4 of 15 shipped zero"},
+    {label:"iOS healthy (median of 7)",value:13000,color:"#1a7f52",tip:"<b>iOS healthy accounts</b><br>median 13,000 (min 4,000)"}];
+  barChart($("ch-logs"),items,{max:14000,ml:210});
+})();
+
+/* ---------- calculator ---------- */
+(function(){
+  const CONF=652, UNT=199, TAIL=295, TOT=1146;
+  function run(){
+    const p1=+$("p1").value, p2=+$("p2").value, q=+$("q").value, rate=+$("rate").value;
+    $("o1").textContent=p1+"%"; $("o2").textContent=p2+"%"; $("oq").textContent=q+"%"; $("or").textContent=rate.toFixed(2)+"%";
+    const ev=CONF+UNT*p1/100+TAIL*p2/100, share=ev/TOT;
+    $("r-share").textContent=Math.round(share*100)+"%"; $("r-pts").textContent=(rate*share).toFixed(2)+" pts"; $("r-cache").textContent=Math.round(share*q)+"% ("+(rate*share*q/100).toFixed(2)+" pts)";
+    const svg=$("ch-share"); svg.innerHTML=""; const W=960, segs=[{v:CONF,c:"#2f6fed",t:"confirmed climbers",s:"confirmed climbers"},{v:UNT*p1/100,c:"#1a7f52",t:"untested top-25 assumed to climb",s:"top-25 untested"},{v:TAIL*p2/100,c:"#b7791f",t:"other users assumed to climb",s:"other users"},{v:TOT-ev,c:"#e2e5ea",t:"not from climbing devices",s:"not climbers"}]; let x=0;
+    segs.forEach(s=>{ const w=s.v/TOT*W; if(w<=0) return; const r=el("rect",{x:x,y:8,width:w,height:34,fill:s.c},svg); r.addEventListener("mousemove",e=>showTip(e,`<b>${s.t}</b><br>${fmt(s.v)} events (${Math.round(s.v/TOT*100)}%)`)); r.addEventListener("mouseleave",hideTip); if(w>s.s.length*7+12) el("text",{x:x+6,y:30,"font-size":12,fill:s.c==="#e2e5ea"?"#1f2937":"#fff"},svg,s.s); x+=w; });
+    el("text",{x:0,y:62,"font-size":11,fill:"#52606d"},svg,"1,146 iOS memory-kill events (7 days to 11/9)");
+  }
+  ["p1","p2","q","rate"].forEach(id=>$(id).addEventListener("input",run));
+  document.querySelectorAll("button[data-p]").forEach(b=>b.addEventListener("click",()=>{ const [a,c]=b.dataset.p.split(",").map(Number); $("p1").value=a; $("p2").value=c; run(); }));
+  run();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,192 @@
+---
+title: "How we measure OOM: iOS vs Android (2026-11-10)"
+description: "How the weekly iOS memory-kill and Android OOM numbers are extracted, and what each one can and cannot say."
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How we measure OOM: iOS vs Android (2026-11-10)</title>
+<style>
+  :root{--ink:#1f2937;--sub:#52606d;--bg:#fff;--panel:#f6f7f9;--border:#e2e5ea;--blue:#2f6fed;--blue-bg:#eaf1ff;--amber:#b7791f;--amber-bg:#fff6e5;--green:#1a7f52;--green-bg:#e9f7ef;--red:#c0392b;--red-bg:#fdecea;--grey:#9aa5b1}
+  *{box-sizing:border-box}
+  body{margin:0;padding:40px 24px 90px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:27px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:14px;margin-bottom:22px}
+  h2{font-size:19px;margin:42px 0 10px;padding-top:6px;border-top:1px solid var(--border)}
+  h3{font-size:15px;margin:20px 0 6px}
+  p{margin:8px 0}
+  .nav{position:sticky;top:0;background:#fffffff2;backdrop-filter:blur(4px);padding:8px 0;margin:0 0 14px;border-bottom:1px solid var(--border);font-size:13px;z-index:5}
+  .nav a{margin-right:14px;color:var(--blue);text-decoration:none}
+  .box{border:1px solid var(--border);background:var(--panel);border-radius:8px;padding:14px 16px;margin:12px 0}
+  .box.blue{background:var(--blue-bg);border-color:#c7d9fb}.box.amber{background:var(--amber-bg);border-color:#f0dcb0}.box.green{background:var(--green-bg);border-color:#bfe5cf}.box.red{background:var(--red-bg);border-color:#f3c3be}
+  .tag{display:inline-block;font-size:11px;font-weight:600;border-radius:10px;padding:1px 8px;margin-right:6px;vertical-align:1px}
+  .tag.ok{background:var(--green-bg);color:var(--green)}.tag.maybe{background:var(--amber-bg);color:var(--amber)}.tag.no{background:var(--red-bg);color:var(--red)}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+  th,td{border:1px solid var(--border);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:600}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:14px 0}
+  .kpi{border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:#fff}
+  .kpi b{display:block;font-size:26px;line-height:1.15}
+  .kpi span{font-size:13px;color:var(--sub)}
+  svg text{font-family:inherit}
+  .chart{width:100%;overflow:visible}
+  .tabs{display:flex;gap:8px;margin:12px 0}
+  .tabs button{font:inherit;font-size:14px;border:1px solid var(--border);background:#fff;border-radius:6px;padding:6px 14px;cursor:pointer}
+  .tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .small{font-size:13px;color:var(--sub)}
+  code{background:var(--panel);padding:1px 5px;border-radius:4px;font-size:13px}
+  pre{background:#1f2937;color:#e5e7eb;border-radius:8px;padding:12px 14px;overflow:auto;font-size:12.5px;line-height:1.5}
+  details{margin:8px 0}
+  summary{cursor:pointer;color:var(--blue);font-size:14px}
+  ul,ol{margin:6px 0 6px 20px;padding:0}
+  #tip{position:fixed;pointer-events:none;background:#1f2937;color:#fff;font-size:12px;padding:5px 8px;border-radius:5px;display:none;z-index:20;max-width:280px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>How we measure OOM: iOS vs Android</h1>
+<div class="meta">2026-11-10 &middot; weekly FE reliability report &middot; sources: Sentry, BigQuery, Postgres replica, scribe_events &middot; no account ids or patient data</div>
+
+<div class="nav"><a href="#summary">Summary</a><a href="#numbers">The numbers</a><a href="#ios">iOS</a><a href="#android">Android</a><a href="#bounds">Bounds</a><a href="#use">How to use them</a><a href="#better">Making them better</a></div>
+
+<h2 id="summary" style="border-top:none;margin-top:8px">Summary</h2>
+<div class="kpis">
+  <div class="kpi"><b>0.44%</b><span>iOS memory kills as % of iOS recordings, 11/2&ndash;11/8 (1,052 / 239,330). <b style="display:inline;font-size:inherit">Foreground kills only: a lower bound.</b></span></div>
+  <div class="kpi"><b>0.014%</b><span>Android confirmed OOM errors (3 / 21,888). Only errors the app catches itself: a <b style="display:inline;font-size:inherit">weak lower bound</b>.</span></div>
+  <div class="kpi"><b>4,285 / 324</b><span>All-cause app kills the same week, iOS / Android (<code>APP_KILLED_DETECTED</code>). The <b style="display:inline;font-size:inherit">upper bound</b>, not just memory.</span></div>
+</div>
+<div class="box blue">
+<b>One line:</b> neither weekly number is the true count of recordings killed for memory. iOS is a foreground-only count that is close to memory kills but undercounts; Android only counts a small slice of what happens. The all-cause kill count is the ceiling for both. The two rows can't be compared with each other.
+</div>
+
+<h2 id="numbers">1. The numbers side by side</h2>
+<div class="tabs" id="tabs"><button data-k="both" class="on">Both</button><button data-k="ios">iOS</button><button data-k="android">Android</button></div>
+<h3>Five-week trend (what the weekly report shows)</h3>
+<svg class="chart" id="ch-trend" viewBox="0 0 960 300"></svg>
+<table id="tbl">
+<thead><tr><th>Week</th><th>iOS memory kills (% of iOS recordings)</th><th>Android confirmed OOM errors (% of Android recordings)</th></tr></thead>
+<tbody></tbody></table>
+
+<h3>Coverage, 11/2&ndash;11/8: how much of what happens each number sees</h3>
+<svg class="chart" id="ch-cov" viewBox="0 0 960 230"></svg>
+<p class="small">Bars use different sources and definitions, so read them as "which part of the picture", not a precise ratio. Sentry counts kills it classifies as memory/watchdog; <code>APP_KILLED_DETECTED</code> counts every session that ended without a clean stop.</p>
+
+<h2 id="ios">2. iOS memory kills: how it is extracted</h2>
+<ol>
+<li><b>Kills (numerator).</b> Sentry issue <code>SCRIBE-MOBILE-B0</code>, event type <code>WatchdogTermination</code>. Sentry infers the kill on the <i>next launch</i> from the previous session: the app was open, then vanished with no crash. It is counted only if the app was in the <b>foreground</b>. Pulled from the Sentry export in BigQuery (<code>unified_monitoring.source_metrics</code>), PRODUCTION only, summed per UTC Mon&ndash;Sun week and release.</li>
+<li><b>Recordings (denominator).</b> Count of <code>scribe</code> rows with <code>device_type = 'MOBILE_IOS'</code> per week and app version, on the Postgres read replica, internal accounts excluded.</li>
+<li><b>Rate</b> = kills &divide; recordings, per week and per version.</li>
+</ol>
+<details><summary>Show the queries</summary>
+<pre>-- kills per week and release (BigQuery, read-only)
+SELECT CAST(DATE_TRUNC(DATE(timestamp), WEEK(MONDAY)) AS STRING) AS wk,
+       COALESCE(REGEXP_EXTRACT(release, r'@(.*)'), '(no release)') AS ver,
+       SUM(event_count) AS kills
+FROM `athelas-scribe-mobile.unified_monitoring.source_metrics`
+WHERE source_issue_key = '&lt;the SCRIBE-MOBILE-B0 key&gt;' AND environment = 'PRODUCTION'
+  AND timestamp &gt;= TIMESTAMP('&lt;first Monday&gt;') AND timestamp &lt; TIMESTAMP('&lt;Monday after the report week&gt;')
+GROUP BY 1, 2 ORDER BY 1, 3 DESC;
+
+-- recordings per week and version (Postgres prod replica, counts only)
+SELECT date_trunc('week', s.created_at)::date AS wk, s.version, COUNT(*) AS n
+FROM scribe s
+WHERE s.created_at &gt;= '&lt;lo&gt;' AND s.created_at &lt; '&lt;hi&gt;' AND s.device_type = 'MOBILE_IOS'
+  AND NOT EXISTS (SELECT 1 FROM scribe_accounts a WHERE a.id = s.scribe_account_id
+       AND (LOWER(a.email) LIKE '%commure%' OR LOWER(a.email) LIKE '%athelas%' OR LOWER(a.email) LIKE '%augmedix%'))
+GROUP BY 1, 2 ORDER BY 1, 3 DESC;</pre></details>
+<p><b>Known limits:</b> background kills are not counted; some non-memory watchdog kills (for example a hang) could be included, though Sentry's own rules exclude crashes, OS updates, reboots and user force-quits; iOS reports no unique-user count here, so one device killed 80 times counts 80 times.</p>
+
+<h2 id="android">3. Android OOM: how it is extracted</h2>
+<ol>
+<li><b>Events (numerator).</b> Sentry <code>OutOfMemoryError</code> events in the <code>scribe-mobile</code> project, filtered to <code>os.name = Android</code>, counted per UTC Mon&ndash;Sun week. Search used: <code>error.type:OutOfMemoryError os.name:Android</code> with fields timestamp, user, device, release and issue, over about 7 weeks. This reproduced the previously published row exactly (6, 3, 1, 7).</li>
+<li><b>Recordings (denominator).</b> Count of <code>MOBILE_ANDROID</code> scribes for the week from the same Postgres query (21,888 for 11/2&ndash;11/8).</li>
+<li><b>Distinct users</b> are reported next to the count, because one phone can produce most of a week's events: in the 10/26 week 6 of 7 events came from a single phone.</li>
+</ol>
+<div class="box amber"><b>What it misses.</b> It only counts out-of-memory errors that the app itself catches. When Android's low-memory killer ends the whole process, nothing is thrown and nothing is logged. On the one phone we traced, the app died about every 7 minutes and Sentry saw roughly 1 in 7 of those deaths. So the Android number is a floor, and a low one.</div>
+
+<h2 id="bounds">4. What each number can and can't say</h2>
+<table>
+<tr><th>Measure</th><th>Counts</th><th>Direction of error vs. true memory kills</th></tr>
+<tr><td><b>iOS</b> Sentry <code>WatchdogTermination</code></td><td>Foreground kills with no crash</td><td><span class="tag maybe">Lower bound</span> misses background kills; small possible over-count from non-memory watchdog kills</td></tr>
+<tr><td><b>Android</b> Sentry <code>OutOfMemoryError</code></td><td>Out-of-memory errors the app catches</td><td><span class="tag no">Weak lower bound</span> misses process kills by the OS</td></tr>
+<tr><td><b>Both</b> <code>APP_KILLED_DETECTED</code> (Retool)</td><td>Any session that ended without a clean stop</td><td><span class="tag ok">Upper bound</span> includes swipe-aways, service timeouts, battery killers and crashes</td></tr>
+</table>
+<p>Same week, 11/2&ndash;11/8: iOS had 4,285 all-cause kills vs 1,052 Sentry memory kills (about a quarter); Android had 324 vs 3. For iOS that means the Sentry figure is a subset of all unclean endings, not a ceiling. Different sources, so the ratio is indicative only.</p>
+
+<h2 id="use">5. How to read and use them</h2>
+<ul>
+<li><b>Track each row against itself</b> week over week. The iOS trend (0.38% &rarr; 0.44% over five weeks) is meaningful; the Android row is too small and too noisy to trend (one phone can swing it).</li>
+<li><b>Do not compare iOS with Android.</b> They measure different things; 0.44% vs 0.014% is mostly a difference in what is counted, not in health.</li>
+<li><b>Concentration matters more than the rate.</b> A few dozen repeat-kill devices produce most of the iOS count; see the <a href="20261109-mobile-memory-kill-loops-analysis.html">kill-loop analysis</a>.</li>
+<li><b>Suggested wording</b> for the report: "iOS counts foreground memory kills only, so it is a lower bound. Android counts only out-of-memory errors the app catches, so it is a lower bound. All-cause app kills are the ceiling."</li>
+</ul>
+
+<h2 id="better">6. Making the numbers better</h2>
+<ol>
+<li><b>Android exit reasons (LLM-21376, in testing).</b> The app will record why the previous process died (Android 11+): low memory, crash, ANR, user-requested and so on. Counting <code>exit_reason = low_memory</code> kills from <code>APP_KILLED_DETECTED</code> would replace today's guess with a real Android memory-kill number.</li>
+<li><b>iOS memory outside recordings (AFEP-3047).</b> Periodic memory capture after the recording ends would explain kills that Sentry cannot see in the foreground.</li>
+<li><b>Per-recording linking (AFEP-3003, done).</b> Tagging each Sentry kill with the recording it interrupted lets us measure how many recordings are cut short, not just how many kills happen.</li>
+</ol>
+
+<h3>Caveats</h3>
+<ul class="small">
+<li>Numbers are from the weekly report for 11/2&ndash;11/8; Android OOM counts are per Mon&ndash;Sun UTC week and read from Sentry on 11/10.</li>
+<li>iOS kills come from the Sentry export in BigQuery; the all-cause kill counts come from <code>scribe_events</code>, which only the user can query in Retool, so the two sources use different definitions.</li>
+<li>The Android all-cause figure (324) counts detected kill events for the week, not unique recordings.</li>
+</ul>
+</div>
+<div id="tip"></div>
+<script>
+const DATA={"weeks": ["10/5-10/11", "10/12-10/18", "10/19-10/25", "10/26-11/1", "11/2-11/8"], "ios": [{"n": 828, "d": 215163, "rate": 0.38482452838080894}, {"n": 858, "d": 216024, "rate": 0.39717809132318627}, {"n": 1031, "d": 226021, "rate": 0.4561523044318891}, {"n": 1039, "d": 230357, "rate": 0.45103903940405543}, {"n": 1052, "d": 239330, "rate": 0.43956043956043955}], "android": [{"n": 6, "d": 27282, "rate": 0.021992522542335604}, {"n": 3, "d": 24955, "rate": 0.012021638950110198}, {"n": 1, "d": 22514, "rate": 0.004441680731988984}, {"n": 7, "d": 21516, "rate": 0.032533928239449714}, {"n": 3, "d": 21888, "rate": 0.013706140350877192}]};
+const $=id=>document.getElementById(id), NS="http://www.w3.org/2000/svg", tip=$("tip");
+function el(t,a,p,x){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(x!==undefined)e.textContent=x;if(p)p.appendChild(e);return e;}
+function showTip(ev,h){tip.innerHTML=h;tip.style.display="block";tip.style.left=(ev.clientX+12)+"px";tip.style.top=(ev.clientY+12)+"px";}
+function hideTip(){tip.style.display="none";}
+const fmt=n=>Math.round(n).toLocaleString();
+let mode="both";
+
+function trend(){
+  const svg=$("ch-trend");svg.innerHTML="";const W=960,H=300,m={l:60,r:60,t:14,b:36};
+  const pw=W-m.l-m.r,ph=H-m.t-m.b,n=DATA.weeks.length,X=i=>m.l+i*(pw/(n-1));
+  const imax=0.6,amax=0.04,Yi=v=>m.t+ph-v/imax*ph,Ya=v=>m.t+ph-v/amax*ph;
+  for(let i=0;i<=4;i++){const y=m.t+ph*i/4;el("line",{x1:m.l,x2:W-m.r,y1:y,y2:y,stroke:"#e2e5ea"},svg);
+    if(mode!=="android")el("text",{x:m.l-8,y:y+4,"text-anchor":"end","font-size":11,fill:"#2f6fed"},svg,(imax*(1-i/4)).toFixed(2)+"%");
+    if(mode!=="ios")el("text",{x:W-m.r+8,y:y+4,"text-anchor":"start","font-size":11,fill:"#c0392b"},svg,(amax*(1-i/4)).toFixed(3)+"%");}
+  DATA.weeks.forEach((w,i)=>el("text",{x:X(i),y:H-12,"text-anchor":"middle","font-size":11,fill:"#52606d"},svg,w));
+  function line(key,Y,color,name){
+    const pts=DATA[key].map((d,i)=>[X(i),Y(d.rate)]);
+    el("polyline",{points:pts.map(p=>p.join(",")).join(" "),fill:"none",stroke:color,"stroke-width":2.5},svg);
+    DATA[key].forEach((d,i)=>{const c=el("circle",{cx:pts[i][0],cy:pts[i][1],r:5,fill:color},svg);
+      c.addEventListener("mousemove",e=>showTip(e,`<b>${name}</b> ${DATA.weeks[i]}<br>${d.rate.toFixed(key==="ios"?2:4)}% (${fmt(d.n)} / ${fmt(d.d)})`));c.addEventListener("mouseleave",hideTip);});
+  }
+  if(mode!=="android")line("ios",Yi,"#2f6fed","iOS memory kills");
+  if(mode!=="ios")line("android",Ya,"#c0392b","Android OOM errors");
+  el("text",{x:m.l,y:10,"font-size":11,fill:"#2f6fed"},svg,mode==="android"?"":"iOS (left axis)");
+  el("text",{x:W-m.r,y:10,"text-anchor":"end","font-size":11,fill:"#c0392b"},svg,mode==="ios"?"":"Android (right axis)");
+}
+function table(){
+  const tb=document.querySelector("#tbl tbody");tb.innerHTML="";
+  DATA.weeks.forEach((w,i)=>{const a=DATA.ios[i],b=DATA.android[i];
+    const tr=document.createElement("tr");tr.innerHTML=`<td>${w}</td><td>${a.rate.toFixed(2)}% (${fmt(a.n)} / ${fmt(a.d)})</td><td>${b.rate.toFixed(4)}% (${fmt(b.n)} / ${fmt(b.d)})</td>`;tb.appendChild(tr);});
+}
+function coverage(){
+  const svg=$("ch-cov");svg.innerHTML="";const W=960,m={l:230,r:90,t:8,b:20},rows=[];
+  if(mode!=="android")rows.push({l:"iOS: all unclean endings",v:4285,c:"#9aa5b1",t:"APP_KILLED_DETECTED, iOS, 11/2-11/8: every session that ended without a clean stop"},{l:"iOS: Sentry foreground memory kills",v:1052,c:"#2f6fed",t:"Sentry WatchdogTermination (SCRIBE-MOBILE-B0), 11/2-11/8"});
+  if(mode!=="ios")rows.push({l:"Android: all unclean endings",v:324,c:"#9aa5b1",t:"APP_KILLED_DETECTED, Android, 11/2-11/8"},{l:"Android: app-caught OOM errors",v:3,c:"#c0392b",t:"Sentry OutOfMemoryError, Android, 11/2-11/8"});
+  const max=Math.max(...rows.map(r=>r.v)),pw=W-m.l-m.r,bh=34,gap=14;
+  svg.setAttribute("viewBox",`0 0 960 ${m.t+rows.length*(bh+gap)+m.b}`);
+  rows.forEach((r,i)=>{const y=m.t+i*(bh+gap);el("text",{x:m.l-10,y:y+bh/2+4,"text-anchor":"end","font-size":12,fill:"#1f2937"},svg,r.l);
+    const w=Math.max(2,r.v/max*pw);const rc=el("rect",{x:m.l,y:y,width:w,height:bh,fill:r.c,rx:3},svg);
+    rc.addEventListener("mousemove",e=>showTip(e,`<b>${fmt(r.v)}</b><br>${r.t}`));rc.addEventListener("mouseleave",hideTip);
+    el("text",{x:m.l+w+6,y:y+bh/2+4,"font-size":12,fill:"#52606d"},svg,fmt(r.v));});
+}
+function draw(){trend();table();coverage();}
+document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",()=>{mode=b.dataset.k;document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));draw();}));
+draw();
+</script>
+</body>
+</html>

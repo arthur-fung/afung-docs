@@ -1,0 +1,371 @@
+---
+title: "LLM-17855 Preview mode: how the backend should generate the note"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM-17855 Preview mode: how the backend should generate the note</title>
+<style>
+  :root {
+    --fg: #1f2328; --muted: #59636e; --border: #d1d9e0; --bg-soft: #f6f8fa;
+    --normandy: #0969da; --normandy-bg: #ddf4ff;
+    --errands: #8250df; --errands-bg: #fbefff;
+    --client: #1a7f37; --client-bg: #dafbe1;
+    --risk: #cf222e; --risk-bg: #ffebe9;
+    --warn: #9a6700; --warn-bg: #fff8c5;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         margin: 0; color: var(--fg); line-height: 1.5; background: #fff; }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  p.sub { color: var(--muted); margin: 0 0 20px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+         background: #eff2f5; padding: 1px 4px; border-radius: 4px; }
+  a { color: var(--normandy); }
+
+  .tldr { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; }
+  .tldr ul { margin: 6px 0 0; padding-left: 20px; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 16px; }
+  .tab { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 6px 14px;
+         cursor: pointer; font-size: 14px; font-weight: 600; color: var(--fg); }
+  .tab[aria-selected="true"] { background: var(--fg); color: #fff; border-color: var(--fg); }
+  .tab .badge { font-weight: 500; font-size: 12px; margin-left: 6px; opacity: .8; }
+
+  .scenario-intro { margin: 0 0 14px; }
+  .legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 12px; flex-wrap: wrap; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+                         margin-right: 6px; vertical-align: -1px; }
+  .legend .l-client::before { background: var(--client); }
+  .legend .l-normandy::before { background: var(--normandy); }
+  .legend .l-errands::before { background: var(--errands); }
+  .legend .l-risk::before { background: var(--risk); }
+
+  .flow-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .flow-wrap { grid-template-columns: 1fr; } }
+
+  .flow { display: flex; flex-direction: column; align-items: stretch; }
+  .step { border: 2px solid; border-radius: 10px; padding: 10px 14px; cursor: pointer; background: #fff;
+          transition: transform .08s, box-shadow .08s; text-align: left; font: inherit; color: inherit; width: 100%; }
+  .step:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .step.active { box-shadow: 0 0 0 3px rgba(9,105,218,.25); }
+  .step .who { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .step .title { font-weight: 600; }
+  .step .where { font-size: 12px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+  .step.client { border-color: var(--client); background: var(--client-bg); } .step.client .who { color: var(--client); }
+  .step.normandy { border-color: var(--normandy); background: var(--normandy-bg); } .step.normandy .who { color: var(--normandy); }
+  .step.errands { border-color: var(--errands); background: var(--errands-bg); } .step.errands .who { color: var(--errands); }
+  .step.risk { outline: 2px dashed var(--risk); outline-offset: 3px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+  .tag.risk { background: var(--risk-bg); color: var(--risk); }
+  .tag.ok { background: var(--client-bg); color: var(--client); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+
+  .arrow { text-align: center; color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+  .arrow::before { content: "▼"; display: block; font-size: 14px; line-height: 1; color: #8c959f; }
+  .arrow.async { color: var(--warn); font-weight: 600; }
+  .arrow.skip { color: var(--client); font-weight: 600; }
+
+  .detail { position: sticky; top: 16px; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--bg-soft); min-height: 140px; }
+  .detail h3 { margin: 0 0 6px; font-size: 15px; }
+  .detail .where { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); margin-bottom: 8px; word-break: break-all; }
+  .detail ul { padding-left: 18px; margin: 6px 0; }
+  .detail .hint { color: var(--muted); font-size: 13px; }
+
+  .verdict { margin-top: 14px; border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+  .verdict.bad { background: var(--risk-bg); border: 1px solid #ffcecb; }
+  .verdict.good { background: var(--client-bg); border: 1px solid #aceebb; }
+  .verdict.neutral { background: var(--bg-soft); border: 1px solid var(--border); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 8px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-soft); }
+  td.c { text-align: center; white-space: nowrap; }
+  .yes { color: var(--client); font-weight: 700; }
+  .no { color: var(--risk); font-weight: 700; }
+  .partial { color: var(--warn); font-weight: 700; }
+
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .chip { border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; font-size: 13px; cursor: pointer; background: #fff; }
+  .chip[aria-pressed="true"] { background: var(--fg); color: #fff; border-color: var(--fg); }
+  tr.hidden { display: none; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+  .pill.include { background: var(--client-bg); color: var(--client); }
+  .pill.skip { background: var(--warn-bg); color: var(--warn); }
+  .pill.decide { background: var(--normandy-bg); color: var(--normandy); }
+
+  details { border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; margin: 8px 0; background: #fff; }
+  details[open] { background: var(--bg-soft); }
+  summary { cursor: pointer; font-weight: 600; }
+  details p, details ul { margin: 8px 0; }
+  .checkbox { margin-right: 8px; transform: translateY(1px); }
+  .progress { font-size: 13px; color: var(--muted); }
+  footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Preview mode: how the backend should generate the note</h1>
+  <p class="sub">
+    <a href="https://linear.app/commure/issue/LLM-17855/preview-mode">LLM-17855</a> · Customize 2.0 · Updated 2026-11-18
+  </p>
+
+  <div class="tldr">
+    <strong>Summary</strong>
+    <ul>
+      <li>Preview should produce the <strong>same note a real scribe would</strong>, using the template's current config.</li>
+      <li>Recommendation: <strong>Option B</strong>. A new normandy endpoint builds the normal note-generation payload and calls errands' <em>existing</em> note generation directly. Errands returns the note in the response and skips the normal callback, so nothing is saved and no follow-on work runs.</li>
+      <li>Errands already supports this: <code>is_note_metrics_engine_env</code> returns the note instead of calling back. Errands' note-quality test tool uses it today.</li>
+      <li>Effort: <strong>about ½ week to 1 week</strong>, about the same as calling the LLM directly, but the output comes from the same code as a real note.</li>
+    </ul>
+  </div>
+
+  <h2>1. How the note gets generated: compare the options</h2>
+  <p class="hint" style="color:var(--muted);margin:0">Pick an option, then click any step to see what it does and where the code is.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-scenario="today" aria-selected="true">Today: real note</button>
+    <button class="tab" role="tab" data-scenario="a" aria-selected="false">Option A: direct LLM call<span class="badge">not recommended</span></button>
+    <button class="tab" role="tab" data-scenario="b" aria-selected="false">Option B: reuse errands<span class="badge">recommended</span></button>
+  </div>
+
+  <div class="legend">
+    <span class="l-client">Client</span>
+    <span class="l-normandy">normandy (API + DB)</span>
+    <span class="l-errands">errands (async LLM worker)</span>
+    <span class="l-risk">Risk</span>
+  </div>
+
+  <p class="scenario-intro" id="scenario-intro"></p>
+  <div class="flow-wrap">
+    <div class="flow" id="flow"></div>
+    <aside class="detail" id="detail" aria-live="polite">
+      <h3>Click a step</h3>
+      <p class="hint">Details for the selected step show here.</p>
+    </aside>
+  </div>
+  <div id="verdict"></div>
+
+  <h2>2. Side-by-side</h2>
+  <table>
+    <thead>
+      <tr><th></th><th>Option A: direct LLM call</th><th>Option B: reuse errands</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Who builds the prompt</td><td>normandy (new copy)</td><td>errands (same code as real notes)</td></tr>
+      <tr><td>Matches real notes</td><td class="no">No. Drifts over time</td><td class="yes">Yes</td></tr>
+      <tr><td>Macro selection, formatting settings, cleanup steps</td><td class="no">Must be rewritten</td><td class="yes">Included automatically</td></tr>
+      <tr><td>Writes scribe / task rows</td><td class="yes">No</td><td class="yes">No</td></tr>
+      <tr><td>Triggers ICD-10, EHR sync, CareCues</td><td class="yes">No</td><td class="yes">No (callback skipped)</td></tr>
+      <tr><td>Errands change</td><td>None</td><td class="partial">Probably none. Confirm mid-run callbacks are safe</td></tr>
+      <tr><td>Precedent</td><td>Old <code>preview_custom_formatting</code>, deprecated because it didn't match</td><td>errands' note-quality test tool</td></tr>
+      <tr><td>Effort</td><td>~½ week</td><td><strong>~½–1 week</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. What the preview includes or leaves out</h2>
+  <p style="margin:0;color:var(--muted)">A real note uses many inputs. Proposed handling for v1:</p>
+  <div class="filters" id="filters">
+    <button class="chip" data-filter="all" aria-pressed="true">All</button>
+    <button class="chip" data-filter="include" aria-pressed="false">Include</button>
+    <button class="chip" data-filter="skip" aria-pressed="false">Leave out in v1</button>
+    <button class="chip" data-filter="decide" aria-pressed="false">Needs a decision</button>
+  </div>
+  <table id="inputs">
+    <thead><tr><th>Input</th><th>Example patient</th><th>Latest scribe</th><th>v1</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr data-kind="decide"><td>Template structure, formatting settings, subsection on/off</td><td class="c">—</td><td class="c">—</td><td><span class="pill decide">Decide</span></td><td>The payload builder reads <strong>saved</strong> config. Every unsaved piece the preview reflects has to be passed in as an override. Formatting settings and subsection toggles are easy. Draft structure and macros cost more.</td></tr>
+      <tr data-kind="include"><td>Macros v2 selection step</td><td class="c">—</td><td class="c">—</td><td><span class="pill include">Include</span></td><td>Changes the output a lot. Already runs inside errands.</td></tr>
+      <tr data-kind="include"><td>Learning examples (passive learning)</td><td class="c">—</td><td class="c">—</td><td><span class="pill include">Include</span></td><td>Read from the provider's saved data. Without them the preview won't match that provider's notes.</td></tr>
+      <tr data-kind="include"><td>Note preferences, dot phrases</td><td class="c">—</td><td class="c">—</td><td><span class="pill include">Include</span></td><td>Cheap lookups by account.</td></tr>
+      <tr data-kind="include"><td>Feature flags</td><td class="c">—</td><td class="c">—</td><td><span class="pill include">Include</span></td><td>Errands branches on many flags. Send the provider's real flag set.</td></tr>
+      <tr data-kind="skip"><td>Carry-forward (previous note)</td><td class="c">None exists</td><td class="c">Exists</td><td><span class="pill skip">Leave out</span></td><td>Carry-forward sections will come out blank or generic. The frontend should say so.</td></tr>
+      <tr data-kind="skip"><td>Patient / appointment context, EHR metadata, chart prep</td><td class="c">None</td><td class="c">Exists</td><td><span class="pill skip">Leave out</span></td><td>Mostly writeback context.</td></tr>
+      <tr data-kind="skip"><td>Uploaded documents (OCR)</td><td class="c">None</td><td class="c">Possibly</td><td><span class="pill skip">Leave out</span></td><td>Can change content. Known difference.</td></tr>
+      <tr data-kind="skip"><td>Diarized transcript, English translation</td><td class="c">—</td><td class="c">Possibly</td><td><span class="pill skip">Leave out</span></td><td>Use the plain transcript. Non-English scribes may look different.</td></tr>
+      <tr data-kind="skip"><td>Post-processing in normandy's callback (ICD-10, corrections)</td><td class="c">—</td><td class="c">—</td><td><span class="pill skip">Leave out</span></td><td>Skipped with the callback. Check whether anything there changes what the user sees.</td></tr>
+      <tr data-kind="include"><td>Template type guard</td><td class="c">—</td><td class="c">—</td><td><span class="pill include">Include</span></td><td>Allow standard note templates only. Reject clinical integrity, CareCues, orders &amp; codes, Compassus and flowsheet templates.</td></tr>
+      <tr data-kind="decide"><td>Section order, hidden titles</td><td class="c">—</td><td class="c">—</td><td><span class="pill decide">Decide</span></td><td>Confirm the frontend renders these from its draft.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>4. Open checks before building Option B</h2>
+  <p class="progress" id="progress"></p>
+  <div id="checks">
+    <details><summary><input type="checkbox" class="checkbox">Errands' other calls back to normandy during generation</summary>
+      <p>Before the final callback, errands sends status and tracking events (<code>send_scribe_status_message_to_normandy</code>, <code>send_scribe_track_event</code>). With no real scribe or task, confirm these don't fail the request.</p></details>
+    <details><summary><input type="checkbox" class="checkbox">Payload builder variant in normandy</summary>
+      <p><code>trigger_single_workflow_task</code> (<code>app/api/v1/scribe/workflows/services.py</code>) expects a workflow task, workflow and scribe. Preview needs a variant built from a template, an account and a transcript, without changing the path real notes take. This is the main normandy work.</p></details>
+    <details><summary><input type="checkbox" class="checkbox">Synchronous HTTP call from normandy to errands</summary>
+      <p>Real notes go through Cloud Tasks. Preview needs a direct, blocking call with errands' auth. Check whether normandy already has a client for that.</p></details>
+    <details><summary><input type="checkbox" class="checkbox">Timeout and wait time</summary>
+      <p>Generation can take 30–90 s for a long transcript. Confirm the gateway timeout allows it, or switch to start-then-poll (about +1 day).</p></details>
+    <details><summary><input type="checkbox" class="checkbox">Access, rate limit, patient data in logs</summary>
+      <ul>
+        <li>"Latest scribe" must be the provider's own. Admin panel use needs the same <code>scribe_account_id</code> site-admin check as LLM-21928 / LLM-21929.</li>
+        <li>Each preview is a full generation, so add a per-user rate limit (<code>@dynamic_rate_limiter</code>).</li>
+        <li>Don't log the full prompt. The old preview endpoint logs it at info level, transcript included.</li>
+      </ul></details>
+    <details><summary><input type="checkbox" class="checkbox">Long transcripts</summary>
+      <p>The real path compresses very long transcripts. Reuse that, or cap the preview's transcript length.</p></details>
+  </div>
+
+  <h2>5. Effort</h2>
+  <table>
+    <thead><tr><th>Scope</th><th>Estimate</th></tr></thead>
+    <tbody>
+      <tr><td>Option A: example or latest transcript, prompt built in normandy, saved config</td><td>~½ week. Won't match real notes</td></tr>
+      <tr><td><strong>Option B</strong>: same sources, errands' generation, carry-forward and EHR context left out, formatting and subsection drafts overridden</td><td><strong>~½–1 week</strong></td></tr>
+      <tr><td>Plus draft structure and macro overrides, polling, admin panel support</td><td>+2–3 days</td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    Based on reading normandy at current <code>main</code> and an errands checkout from 2026-10-12. Not tested against a live server. The errands owner should confirm the <code>is_note_metrics_engine_env</code> behavior on current errands.
+  </footer>
+</main>
+
+<script>
+const SCENARIOS = {
+  today: {
+    intro: "Today a real note takes two separate halves. <strong>normandy collects the inputs</strong> and <strong>errands builds the prompt and runs the LLM</strong>. The result comes back through a callback that saves it and kicks off follow-on work.",
+    verdict: { cls: "neutral", html: "This is the path that produces real notes. A preview should match its output without its side effects (saved rows, ICD-10, EHR sync)." },
+    steps: [
+      { who: "client", title: "Submit recording", where: "POST /scribe/workflows/...",
+        detail: { title: "Client submits audio + template IDs", where: "app/api/v1/scribe/workflows/", body: "<ul><li>Validates and dedupes by UUID.</li><li>Fetches feature flags.</li></ul>" } },
+      { arrow: "" },
+      { who: "normandy", title: "Create DB records", where: "Scribe · AIWorkflow · AIWorkflowTask · Transcription",
+        detail: { title: "DB setup", where: "app/api/v1/scribe/workflows/", body: "<p>Creates one AIWorkflow, one Scribe, one AIWorkflowTask per template, and one Transcription per audio file.</p>" } },
+      { arrow: "speech-to-text runs, transcript stored" },
+      { who: "normandy", title: "Collect inputs and build payload", where: "trigger_single_workflow_task()",
+        detail: { title: "Collect inputs and build payload", where: "app/api/v1/scribe/workflows/services.py:3495", body: "<p>Reads <strong>saved</strong> config from the DB:</p><ul><li>template form_definition (disabled subsections stripped)</li><li>custom_format_settings, macros, note_preferences, dot phrases</li><li>learning_examples, feature flags</li><li>carry-forward context, EHR metadata, chart prep</li></ul><p>Packs it into a <code>GenerateWorkflowTaskOutput</code> payload.</p>" } },
+      { arrow: "scribe_trigger_task() → Cloud Tasks (async)", cls: "async" },
+      { who: "errands", title: "Build prompt and run LLM", where: "POST /generate_workflow_task_output",
+        detail: { title: "Note generation", where: "errands/jobs/openai/controllers.py:2974", body: "<p>About 600 lines. Builds the prompt from the payload and runs the LLM steps:</p><ul><li>parallel prompt fetches</li><li>formatting settings, note preferences, dot phrases, macros</li><li>separate macro-selection step</li><li>long-prompt handling, model picked by language</li><li>output cleanup</li></ul>" } },
+      { arrow: "HTTP callback", cls: "" },
+      { who: "normandy", title: "Save output and trigger follow-on work", where: "POST /task_completed_callback",
+        detail: { title: "Task-completed callback", where: "app/api/v1/workflows/controllers.py:659", body: "<p>Saves the note on the AIWorkflowTask, then triggers ICD-10, clinical integrity, CareCues, EHR sync and so on.</p>" } },
+      { arrow: "" },
+      { who: "client", title: "Poll and show the note", where: "",
+        detail: { title: "Client shows the note", where: "", body: "<p>The client polls the scribe until the note is ready.</p>" } },
+    ]
+  },
+  a: {
+    intro: "normandy builds its own prompt and calls the LLM directly. Simple, and nothing is saved, but it's the same design as the deprecated preview.",
+    verdict: { cls: "bad", html: "<strong>Risk:</strong> the prompt is a second copy of errands' logic. The preview won't match real notes and will drift further over time. That's why the old <code>preview_custom_formatting</code> was dropped." },
+    steps: [
+      { who: "client", title: "Tap Preview", where: "POST /scribe/templates/{id}/preview",
+        detail: { title: "Preview request", where: "new endpoint", body: "<p>Sends the source (example patient or latest scribe) and the draft config.</p>" } },
+      { arrow: "" },
+      { who: "normandy", title: "Get transcript", where: "sample constant or latest scribe",
+        detail: { title: "Get transcript", where: "app/api/v1/scribe/workflows/constants.py", body: "<p>Sample transcript or the provider's latest scribe, after an access check.</p>" } },
+      { arrow: "" },
+      { who: "normandy", title: "Build its OWN prompt", where: "second copy of errands' prompt logic", risk: true, tag: ["risk", "won't match"],
+        detail: { title: "Build prompt in normandy", where: "like app/api/v1/scribe/controllers.py:9037 (old preview)", body: "<p>Re-creates in normandy what errands does: formatting, preferences, dot phrases, macro selection, cleanup.</p><p><strong>Anything missed or changed later in errands makes the preview differ from real notes.</strong></p>" } },
+      { arrow: "scribe_claude_service(...) (synchronous)" },
+      { who: "normandy", title: "Return note text", where: "",
+        detail: { title: "Return note", where: "", body: "<p>No DB rows and no follow-on work. That part is good.</p>" } },
+      { arrow: "" },
+      { who: "client", title: "Show preview", where: "",
+        detail: { title: "Show preview", where: "", body: "<p>Renders the returned note.</p>" } },
+    ]
+  },
+  b: {
+    intro: "normandy builds the <strong>same payload</strong> as a real note and calls errands' <strong>existing</strong> note generation directly. Errands returns the note in the response and skips the callback.",
+    verdict: { cls: "good", html: "<strong>Recommended.</strong> The note comes from the same code as a real one. Errands already supports this via <code>is_note_metrics_engine_env</code>, so it might need no errands change." },
+    steps: [
+      { who: "client", title: "Tap Preview", where: "POST /scribe/templates/{id}/preview",
+        detail: { title: "Preview request", where: "new endpoint", body: "<p>Sends the source (example patient or latest scribe) and the draft config.</p>" } },
+      { arrow: "" },
+      { who: "normandy", title: "Get transcript", where: "sample constant or latest scribe",
+        detail: { title: "Get transcript", where: "app/api/v1/scribe/workflows/constants.py", body: "<p>Sample transcript or the provider's latest scribe, after an access check.</p>" } },
+      { arrow: "" },
+      { who: "normandy", title: "Build the SAME payload, with overrides", where: "payload builder variant", tag: ["warn", "main BE work"],
+        detail: { title: "Build the normal payload", where: "variant of trigger_single_workflow_task()", body: "<ul><li>Same <code>GenerateWorkflowTaskOutput</code> as a real note.</li><li>Draft overrides: formatting settings, subsection toggles (structure and macros optional).</li><li>Carry-forward and EHR context left out.</li><li>Sets <code>is_note_metrics_engine_env = True</code>.</li></ul><p>Needs a variant that works from a template, an account and a transcript, without a real workflow task or scribe.</p>" } },
+      { arrow: "direct HTTP POST, waits for response (no Cloud Tasks)" },
+      { who: "errands", title: "Same note generation as real notes", where: "POST /generate_workflow_task_output", tag: ["ok", "unchanged"],
+        detail: { title: "Errands generation (unchanged)", where: "errands/jobs/openai/controllers.py:2974", body: "<p>Same prompt building and LLM steps as a real note.</p><p>Check: mid-run status and tracking calls to normandy must not fail without a real scribe or task.</p>" } },
+      { arrow: "is_note_metrics_engine_env → returns note, skips /task_completed_callback", cls: "skip" },
+      { who: "normandy", title: "Return note", where: "nothing saved, no follow-on work",
+        detail: { title: "Return note", where: "errands/jobs/openai/controllers.py:4133", body: "<p>Errands returns the note in the HTTP response. Normandy never gets the task-completed callback, so no DB rows, ICD-10, EHR sync or CareCues.</p><p>Precedent: <code>errands/note_quality_metrics_engine/endpoint_testing.py:223</code>.</p>" } },
+      { arrow: "" },
+      { who: "client", title: "Show preview", where: "",
+        detail: { title: "Show preview", where: "", body: "<p>Renders the returned note.</p>" } },
+    ]
+  }
+};
+
+const flowEl = document.getElementById("flow");
+const detailEl = document.getElementById("detail");
+const introEl = document.getElementById("scenario-intro");
+const verdictEl = document.getElementById("verdict");
+
+function showDetail(d, btn) {
+  document.querySelectorAll(".step.active").forEach(s => s.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+  detailEl.innerHTML = `<h3>${d.title}</h3>${d.where ? `<div class="where">${d.where}</div>` : ""}${d.body}`;
+}
+
+function render(key) {
+  const sc = SCENARIOS[key];
+  introEl.innerHTML = sc.intro;
+  verdictEl.innerHTML = `<div class="verdict ${sc.verdict.cls}">${sc.verdict.html}</div>`;
+  flowEl.innerHTML = "";
+  let first = null;
+  sc.steps.forEach(s => {
+    if ("arrow" in s) {
+      const a = document.createElement("div");
+      a.className = "arrow " + (s.cls || "");
+      a.textContent = s.arrow;
+      flowEl.appendChild(a);
+      return;
+    }
+    const b = document.createElement("button");
+    b.className = `step ${s.who}${s.risk ? " risk" : ""}`;
+    const tag = s.tag ? `<span class="tag ${s.tag[0]}">${s.tag[1]}</span>` : "";
+    b.innerHTML = `<div class="who">${s.who}</div><div class="title">${s.title}${tag}</div>${s.where ? `<div class="where">${s.where}</div>` : ""}`;
+    b.addEventListener("click", () => showDetail(s.detail, b));
+    flowEl.appendChild(b);
+    if (!first) first = [s.detail, b];
+  });
+  detailEl.innerHTML = `<h3>Click a step</h3><p class="hint">Details for the selected step show here.</p>`;
+}
+
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", "false"));
+  t.setAttribute("aria-selected", "true");
+  render(t.dataset.scenario);
+}));
+render("today");
+
+// input table filters
+document.querySelectorAll("#filters .chip").forEach(c => c.addEventListener("click", () => {
+  document.querySelectorAll("#filters .chip").forEach(x => x.setAttribute("aria-pressed", "false"));
+  c.setAttribute("aria-pressed", "true");
+  const f = c.dataset.filter;
+  document.querySelectorAll("#inputs tbody tr").forEach(r => {
+    r.classList.toggle("hidden", f !== "all" && r.dataset.kind !== f);
+  });
+}));
+
+// open-check progress
+const boxes = document.querySelectorAll("#checks .checkbox");
+const progressEl = document.getElementById("progress");
+function updateProgress() {
+  const done = [...boxes].filter(b => b.checked).length;
+  progressEl.textContent = `${done} of ${boxes.length} checks resolved (tick to track; not saved)`;
+}
+boxes.forEach(b => {
+  b.addEventListener("click", e => e.stopPropagation());
+  b.addEventListener("change", updateProgress);
+});
+updateProgress();
+</script>
+</body>
+</html>

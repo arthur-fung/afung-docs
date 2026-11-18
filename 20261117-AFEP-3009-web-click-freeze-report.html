@@ -1,0 +1,244 @@
+---
+title: "Web app ignores quick clicks (AFEP-3009): hypothesis, findings, recommendation (2026-11-17)"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web app ignores quick clicks (AFEP-3009)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  a { color: var(--series-1); }
+  .viz-root {
+    color-scheme: light;
+    --surface-0: #ffffff; --card: #f5f5f3; --line: #dddcd7;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --series-1: #2a78d6; --series-2: #eb6834;
+    --good: #1f7a4d; --good-bg: #e3f3ea; --crit: #b3261e; --crit-bg: #fbe7e5; --warn: #8a5a00; --warn-bg: #fdf0d5;
+    --grid: #ecebe7;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      color-scheme: dark;
+      --surface-0: #121211; --card: #222220; --line: #3a3936;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+      --series-1: #3987e5; --series-2: #d95926;
+      --good: #6fd3a0; --good-bg: #163526; --crit: #ff8f86; --crit-bg: #3a1c1a; --warn: #f1c46a; --warn-bg: #3a2e12;
+      --grid: #2c2b29;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .viz-root { background: var(--surface-0); color: var(--text-primary);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100vh; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 40px 0 8px; }
+  .sub { color: var(--text-secondary); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .grid3, .grid2 { grid-template-columns: 1fr; } }
+  .tile b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .p-good { background: var(--good-bg); color: var(--good); }
+  .p-crit { background: var(--crit-bg); color: var(--crit); }
+  .p-warn { background: var(--warn-bg); color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); font-weight: 600; }
+  code { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 13px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tabs button, .choice button {
+    font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface-0); color: var(--text-primary); }
+  .tabs button[aria-selected="true"], .choice button[aria-pressed="true"] {
+    background: var(--series-1); border-color: var(--series-1); color: #fff; }
+  .panel[hidden] { display: none; }
+  details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 8px 0; background: var(--card); }
+  summary { cursor: pointer; font-weight: 600; }
+  .flow { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+  .step { flex: 1 1 140px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .step.bad { border-color: var(--crit); }
+  .arrow { align-self: center; color: var(--text-muted); }
+  .note { color: var(--text-secondary); font-size: 13px; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .axis text { fill: var(--text-muted); font-size: 11px; }
+  .gridline { stroke: var(--grid); }
+  #result { margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+
+<h1>Web app ignores quick clicks</h1>
+<p class="sub">AFEP-3009 / LLM-21079 &middot; one provider on the web app (Edge and Chrome) &middot; written 2026-11-17</p>
+
+<div class="card">
+  <b>In one sentence</b><br>
+  A quick click does nothing (no ripple), but clicking and holding works. The strongest lead is a known
+  Flutter web bug that happens when the accessibility layer ("semantics") is on. Flutter has already fixed it
+  upstream, but not in any stable release yet. We have not confirmed that semantics is on for this provider, so the
+  first step is a small log that tells us.
+</div>
+
+<h2>1. What the provider sees</h2>
+<div class="grid3">
+  <div class="card tile"><b>Symptom</b>Switching patients or dates does nothing on a normal click. No hover or ripple reaction in the video.</div>
+  <div class="card tile"><b>Workaround</b>Click and hold works in both Edge and Chrome.</div>
+  <div class="card tile"><b>Scope</b>Two computers, both browsers, started mid-October. Colleagues at the same site are fine. It is worse with the telehealth site (Doxy.me) open in the same browser.</div>
+</div>
+<p class="note">Also seen on a teammate's machine: clearing only the browser's cached files fixed it, and it stayed fixed.</p>
+
+<h2>2. How a click should work, and where it breaks</h2>
+<div class="flow">
+  <div class="step"><b>1. Mouse down + up</b>Browser sends both to Flutter.</div><div class="arrow">&rarr;</div>
+  <div class="step"><b>2. Flutter handles it</b>Row highlights, tap fires, patient opens.</div>
+</div>
+<p class="note">With semantics on, Flutter's click debouncer changes this:</p>
+<div class="flow">
+  <div class="step"><b>1. Mouse down + up</b>Held back by the debouncer.</div><div class="arrow">&rarr;</div>
+  <div class="step"><b>2. Browser "click" arrives</b>Held mouse events are thrown away.</div><div class="arrow">&rarr;</div>
+  <div class="step bad"><b>3. Substitute "accessibility tap"</b>Sent to the centre of the element. If it does not land on the handler, the click is lost.</div>
+</div>
+<p>Holding the button long enough makes the debouncer give up and pass the real mouse events through. That is why
+<b>hold works</b> and a quick click shows <b>no ripple</b>.
+Matches the Flutter reports
+<a href="https://github.com/flutter/flutter/issues/158530">#158530</a>,
+<a href="https://github.com/flutter/flutter/issues/147881">#147881</a>,
+<a href="https://github.com/flutter/flutter/issues/188859">#188859</a>.</p>
+
+<h2>3. Hypotheses, ranked</h2>
+<div class="tabs" role="tablist" id="hyp-tabs"></div>
+<div id="hyp-panels"></div>
+
+<h2>4. Findings</h2>
+<details open><summary>The app is healthy underneath <span class="pill p-good">checked</span></summary>
+  <p>The provider's client logs (one day, about 50,000 lines) show database calls in 5&ndash;70 ms, network checks all "good",
+  event uploads succeeding and no errors near the time of clicks. Our code keeps running; clicks are not reaching the widget.</p></details>
+<details open><summary>Heavy page reloading and several open copies <span class="pill p-warn">noted</span></summary>
+  <p>About 5 page reloads a day on one browser, and 4 browser instances seen in one day, two active at the same time
+  (probably Edge and Chrome). Consistent with a person refreshing because the screen feels stuck.</p></details>
+<details open><summary>Memory is normal <span class="pill p-good">ruled out</span></summary>
+  <p>Browser memory while recording (Nov 2&ndash;17): about 100&ndash;130 MB on most days. One Edge-only spike on Nov 4 (peak about 856 MB)
+  that did not repeat. The complaint started in mid-October, so memory does not explain it.</p>
+  <div class="chart" id="memchart"></div>
+  <p class="note">Average (blue) and peak (orange) browser memory per day, MB, recording sessions only.</p></details>
+<details><summary>Stuck tour overlay <span class="pill p-good">ruled out</span></summary>
+  <p>Logs show no tour active and the user is not eligible for one.</p></details>
+<details><summary>Stale app files in the browser cache <span class="pill p-warn">unlikely</span></summary>
+  <p>Production sends <code>max-age=0, must-revalidate</code> for <code>index.html</code>, <code>main.dart.js</code>, <code>flutter.js</code>,
+  the CanvasKit <code>.wasm</code> and our JS files, so old copies cannot be reused after a release.
+  The service worker never stores anything. JSON files (such as <code>version.json</code>) can be reused for up to 1 hour.
+  Open question: why clearing cached files fixed it for a teammate.</p></details>
+<details><summary>What we do not measure today <span class="pill p-crit">gap</span></summary>
+  <p>On web we send no CPU or GPU usage, no frame timings, no record of clicks that did not land, and no record of whether
+  semantics is on. Only memory (while recording) is sent.</p></details>
+<details><summary>No past fix in scribe-mobile <span class="pill p-warn">checked</span></summary>
+  <p>Nothing in the repo history fixes this symptom. The closest is a Copilot-input focus fix (#5883, Aug 31), which is a different bug.
+  Existing open reports of dead Assistant input boxes (LLM-20436) may share the same cause; worth checking once the log exists.</p></details>
+
+<h2>5. The upstream fix, and which Flutter has it</h2>
+<table>
+  <thead><tr><th>Flutter version</th><th>Channel</th><th>Has the fix?</th></tr></thead>
+  <tbody>
+    <tr><td>3.47.9 (what we ship)</td><td>stable</td><td><span class="pill p-crit">No</span></td></tr>
+    <tr><td>3.50.0 (Nov 9)</td><td>stable, latest</td><td><span class="pill p-crit">No</span> (branched before the merge)</td></tr>
+    <tr><td>3.51.0-0.1.pre (Nov 10)</td><td>beta</td><td><span class="pill p-good">Yes</span> first release with it</td></tr>
+  </tbody>
+</table>
+<p class="note">Fix: <a href="https://github.com/flutter/flutter/pull/191529">flutter#191529</a> "prefer pointer events over semantics tap for mouse clicks on web",
+merged Nov 3, closed <a href="https://github.com/flutter/flutter/issues/188859">#188859</a>. Checked against merge commit <code>c664bdd</code>.</p>
+
+<h2>6. Recommendation</h2>
+<ol>
+  <li><b>Add a log for semantics (do first, small).</b> On web, log <code>SemanticsBinding.instance.semanticsEnabled</code> at startup and on every change, and set it as a Mixpanel super property
+      (<code>web_semantics_enabled</code>). Needs nothing from users.</li>
+  <li><b>Add a click log behind a flag.</b> A capture-phase browser listener records pointer down / up / click; Dart records what Flutter received. If the browser saw a mouse down and Flutter got nothing within 500 ms, log it with the target and the semantics state.
+      Also log browser, GPU renderer and number of open copies once per session.</li>
+  <li><b>Small app-side mitigation.</b> The visit row wraps its list item in a <code>MouseRegion</code> that rebuilds on hover (pin / hide buttons come and go).
+      With semantics on, that rebuilds the hidden accessibility element just as the click lands. Keep those buttons in the tree and only toggle visibility. (Hypothesis; safe either way.)</li>
+  <li><b>If the log shows semantics on for affected users:</b> plan the Flutter upgrade to 3.51 stable (a large jump from 3.47, QA on all platforms) and optionally ask Flutter for a cherry-pick into 3.50.x.</li>
+  <li><b>Avoid as a first step:</b> disabling semantics for everyone. It fixes clicks but breaks screen-reader support.</li>
+</ol>
+
+<h2>7. What if the log says...</h2>
+<div class="choice" id="choice">
+  <button data-k="on">Semantics is on</button>
+  <button data-k="off-lost">Semantics off, clicks lost</button>
+  <button data-k="off-slow">Semantics off, slow frames</button>
+</div>
+<div id="result" class="card"></div>
+
+<p class="note" style="margin-top:36px">Sources: Flutter issues
+<a href="https://github.com/flutter/flutter/issues/158530">#158530</a>,
+<a href="https://github.com/flutter/flutter/issues/147881">#147881</a>,
+<a href="https://github.com/flutter/flutter/issues/195812">#195812</a>,
+<a href="https://github.com/flutter/flutter/issues/195291">#195291</a>;
+PRs <a href="https://github.com/flutter/flutter/pull/191529">#191529</a>,
+<a href="https://github.com/flutter/flutter/pull/192641">#192641</a>.
+Provider identity, site and account IDs are left out on purpose.</p>
+
+</div></div>
+
+<script>
+const hyps = [
+  { name: "A. Semantics debouncer", tag: ["most likely", "p-warn"],
+    body: "Matches the symptom exactly: no ripple on a quick click, hold works, only some machines. Assistive or dictation software on a machine can switch semantics on by itself. <b>Not yet confirmed</b> for this provider. Test: log semantics state (recommendation 1)." },
+  { name: "B. Doxy.me competing for the GPU", tag: ["possible", "p-warn"],
+    body: "The provider said it got worse with the telehealth site open in the same browser. That site uses the camera, mic and video encoding. But slow frames would delay a click, not drop it with no ripple. Test: frame-timing log; ask whether it happens with Doxy.me fully closed." },
+  { name: "C. Our own rebuilds", tag: ["possible", "p-warn"],
+    body: "Rebuilding a row between mouse down and up cancels the tap. The hover rebuild in the visit row is the main suspect (recommendation 3). Test: click log comparing browser clicks with Flutter taps." },
+  { name: "D. Missing worker feature in log", tag: ["unlikely", "p-good"],
+    body: "<code>dedicatedWorkersInSharedWorkers</code> is not supported by Chrome or Edge at all, so every user logs it. It only changes how the local database stores data, not clicks." },
+  { name: "E. Stale cached files / memory / tour overlay", tag: ["ruled out", "p-good"],
+    body: "Cache headers force a re-check on each load, memory is normal, and no tour is active. See findings." }
+];
+const tabs = document.getElementById('hyp-tabs'), panels = document.getElementById('hyp-panels');
+hyps.forEach((h, i) => {
+  const b = document.createElement('button');
+  b.textContent = h.name; b.setAttribute('role','tab'); b.setAttribute('aria-selected', i===0);
+  b.onclick = () => select(i);
+  tabs.appendChild(b);
+  const p = document.createElement('div');
+  p.className = 'panel card'; p.hidden = i!==0;
+  p.innerHTML = '<span class="pill ' + h.tag[1] + '">' + h.tag[0] + '</span><p>' + h.body + '</p>';
+  panels.appendChild(p);
+});
+function select(n) {
+  [...tabs.children].forEach((b,i) => b.setAttribute('aria-selected', i===n));
+  [...panels.children].forEach((p,i) => p.hidden = i!==n);
+}
+
+const outcomes = {
+  "on": "Cause confirmed. The upstream fix exists (flutter#191529). Do the hover mitigation now, then plan the upgrade to Flutter 3.51 stable. Keep an eye on LLM-20436 (dead Assistant input), which may share this cause.",
+  "off-lost": "Something other than semantics is swallowing clicks. The click log shows the target element: if it is not the Flutter view, an element is lying on top of the app; if it is the Flutter view, look for our own gesture or rebuild conflict.",
+  "off-slow": "Resource contention. Recommend a separate browser or window for the telehealth site, and look at reducing our own background work. Consider a frame-timing log to quantify it."
+};
+const result = document.getElementById('result');
+result.textContent = "Pick a result above.";
+document.querySelectorAll('#choice button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#choice button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  result.textContent = outcomes[b.dataset.k];
+});
+
+// memory chart: [day, avg MB, peak MB], recording sessions only
+const mem = [["11-02",93,93],["11-03",118,198],["11-04",273,856],["11-05",103,183],["11-06",128,152],["11-09",99,148],
+             ["11-10",115,222],["11-11",113,241],["11-12",108,239],["11-13",109,166],["11-16",108,150],["11-17",116,239]];
+(function(){
+  const W=900,H=240,L=40,B=26,T=10,max=900,n=mem.length,bw=(W-L)/n;
+  const y=v=>T+(H-T-B)*(1-v/max);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Daily browser memory">';
+  [0,300,600,900].forEach(v=>{s+='<g class="axis"><line class="gridline" x1="'+L+'" x2="'+W+'" y1="'+y(v)+'" y2="'+y(v)+'"/><text x="4" y="'+(y(v)+4)+'">'+v+'</text></g>';});
+  mem.forEach((d,i)=>{
+    const x=L+i*bw+bw*0.15, w=bw*0.7;
+    s+='<rect x="'+x+'" y="'+y(d[2])+'" width="'+w+'" height="'+(y(0)-y(d[2]))+'" fill="var(--series-2)" opacity=".55"><title>'+d[0]+' peak '+d[2]+' MB</title></rect>';
+    s+='<rect x="'+x+'" y="'+y(d[1])+'" width="'+w+'" height="'+(y(0)-y(d[1]))+'" fill="var(--series-1)"><title>'+d[0]+' avg '+d[1]+' MB</title></rect>';
+    s+='<g class="axis"><text x="'+(x+w/2)+'" y="'+(H-8)+'" text-anchor="middle">'+d[0]+'</text></g>';
+  });
+  document.getElementById('memchart').innerHTML=s+'</svg>';
+})();
+</script>
+</body>
+</html>

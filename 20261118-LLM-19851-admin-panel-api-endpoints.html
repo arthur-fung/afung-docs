@@ -1,0 +1,76 @@
+---
+title: "LLM-19851 — Admin Panel provider editing: API support"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LLM-19851 — Admin Panel provider editing: API support</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; margin: 32px; color: #1f2328; line-height: 1.5; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.sub { color: #59636e; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #d1d9e0; padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; font-weight: 600; }
+  tr.gap { background: #fff8f0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #eff2f5; padding: 1px 4px; border-radius: 4px; }
+  .yes { color: #1a7f37; font-weight: 600; }
+  .no { color: #cf222e; font-weight: 700; }
+  .muted { color: #59636e; }
+  a { color: #0969da; }
+</style>
+</head>
+<body>
+<h1>Admin Panel: which APIs let a site admin edit a provider's template</h1>
+<p class="sub">
+  Parent: <a href="https://linear.app/commure/issue/LLM-19851">LLM-19851</a>
+  · FE PR: <a href="https://github.com/getathelas/scribe-mobile/pull/6539">scribe-mobile#6539</a>
+  · Updated 2026-11-18
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>API</th>
+      <th>What it does</th>
+      <th>Supports admin editing a provider?</th>
+      <th>Needs BE change?</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>GET /custom_formatting/format_option_settings/{templateId}</code></td><td>Load provider's formatting settings</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>POST /custom_formatting/format_option_settings</code></td><td>Save a formatting change</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr class="gap">
+      <td><code>DELETE /custom_formatting/format_option_settings/{templateId}/{customFormatId}/{section}</code></td>
+      <td>Clear a formatting setting</td>
+      <td><span class="no">No</span>, acts on the admin's own account. It can delete the admin's own setting.</td>
+      <td><span class="no">Yes</span>, <a href="https://linear.app/commure/issue/LLM-21928">LLM-21928</a> (small). Disabled in admin mode for now.</td>
+    </tr>
+    <tr class="gap">
+      <td><code>POST /template_builder/edit_template_v2</code> (template builder)</td>
+      <td>Add, remove, or rename subsections and rename the template</td>
+      <td><span class="no">No</span>, returns 403 because the admin isn't the template's owner. Nothing is saved.</td>
+      <td><span class="no">Yes</span>, <a href="https://linear.app/commure/issue/LLM-21929">LLM-21929</a> (medium, needs product sign-off). Locked in admin mode for now.</td>
+    </tr>
+    <tr><td><code>GET /templates/section_generation</code></td><td>Load provider's subsections</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>POST /templates/section_generation</code></td><td>Create a subsection row</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>PATCH /templates/section_generation/{id}</code></td><td>Turn a subsection on or off</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>POST /templates/section_generation/reorder</code></td><td>Reorder subsections</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>GET /macros/macros_by_section</code></td><td>Load provider's macros</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>GET /macros/macro_links_by_template</code></td><td>Load macro-to-template links</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>POST /macros/create_and_link_macro</code></td><td>Add a macro</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>PATCH /macros/{macroId}</code></td><td>Edit a macro</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>PATCH /macros/macro_link/{linkId}</code></td><td>Edit a macro link or toggle it on or off</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>POST /macros/copy_and_relink_macro</code></td><td>Copy and relink a macro</td><td class="yes">Yes</td><td>No</td></tr>
+    <tr><td><code>DELETE /macros/macro_template_account/{linkId}</code></td><td>Remove a macro</td><td class="yes">Yes</td><td>No</td></tr>
+  </tbody>
+</table>
+
+<p class="muted">
+  Not used by the admin screen, so out of scope: <code>GET /custom_formatting/format_option_settings/{templateId}/{customFormatId}/{section}</code>
+  (fetch one setting) and deleting a macro outright. Both also ignore the provider.
+</p>
+</body>
+</html>

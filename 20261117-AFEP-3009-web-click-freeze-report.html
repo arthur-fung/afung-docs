@@ -76,11 +76,12 @@ layout: null
 <p class="sub">AFEP-3009 / LLM-21079 &middot; one provider on the web app (Edge and Chrome) &middot; written 2026-11-17</p>
 
 <div class="card">
+  <span class="pill p-good">Reproduced locally</span><br>
   <b>In one sentence</b><br>
-  A quick click does nothing (no ripple), but clicking and holding works. The strongest lead is a known
-  Flutter web bug that happens when the accessibility layer ("semantics") is on. Flutter has already fixed it
-  upstream, but not in any stable release yet. We have not confirmed that semantics is on for this provider, so the
-  first step is a small log that tells us.
+  A quick click does nothing (no ripple), but clicking and holding works. This is a known Flutter web bug that
+  happens when the accessibility layer ("semantics") is on. We reproduced it by forcing semantics on in the browser console.
+  Flutter has fixed it upstream, but the fix is not in any stable release yet. What we do not know is
+  <i>what switched semantics on</i> on the provider's laptop.
 </div>
 
 <h2>1. What the provider sees</h2>
@@ -102,18 +103,35 @@ layout: null
   <div class="step"><b>2. Browser "click" arrives</b>Held mouse events are thrown away.</div><div class="arrow">&rarr;</div>
   <div class="step bad"><b>3. Substitute "accessibility tap"</b>Sent to the centre of the element. If it does not land on the handler, the click is lost.</div>
 </div>
-<p>Holding the button long enough makes the debouncer give up and pass the real mouse events through. That is why
-<b>hold works</b> and a quick click shows <b>no ripple</b>.
+<p>A quick click never reaches the button, so there is <b>no ripple</b>. A click-and-hold gets through. Flutter's own report
+<a href="https://github.com/flutter/flutter/issues/158530">#158530</a> describes the same thing ("it takes a long click for a click to register").
+Why holding gets through is our reading of how the debouncer works; the Flutter reports do not spell it out.
 Matches the Flutter reports
 <a href="https://github.com/flutter/flutter/issues/158530">#158530</a>,
 <a href="https://github.com/flutter/flutter/issues/147881">#147881</a>,
 <a href="https://github.com/flutter/flutter/issues/188859">#188859</a>.</p>
 
-<h2>3. Hypotheses, ranked</h2>
+<h2>3. Reproduction</h2>
+<div class="card">
+  <p><b>Reproduced on a dev machine by forcing semantics on.</b> Result: quick clicks fail, click-and-hold works. Same as the provider.</p>
+  <details><summary>Steps (about a minute)</summary>
+    <ol>
+      <li>Open the web app and log in (staging or a release build; avoid debug mode).</li>
+      <li>In the DevTools console run: <code>document.querySelector('flt-semantics-placeholder').click()</code></li>
+      <li>Check it worked: <code>document.querySelectorAll('flt-semantics').length</code> is above 0.</li>
+      <li>Quick-click a visit row or date chip: nothing happens. Click and hold: it works.</li>
+      <li>Reload the page to switch semantics off again (it cannot be turned off in a running session).</li>
+    </ol>
+    <p class="note">Do not use <code>SemanticsBinding.instance.ensureSemantics()</code> for this: in debug mode on localhost it disables all text input (see the comment in <code>lib/main.dart</code>).</p>
+  </details>
+  <p class="note">Not yet checked: whether the date picker and every other list fail the same way, and what turned semantics on for the provider.</p>
+</div>
+
+<h2>4. Hypotheses</h2>
 <div class="tabs" role="tablist" id="hyp-tabs"></div>
 <div id="hyp-panels"></div>
 
-<h2>4. Findings</h2>
+<h2>5. Findings</h2>
 <details open><summary>The app is healthy underneath <span class="pill p-good">checked</span></summary>
   <p>The provider's client logs (one day, about 50,000 lines) show database calls in 5&ndash;70 ms, network checks all "good",
   event uploads succeeding and no errors near the time of clicks. Our code keeps running; clicks are not reaching the widget.</p></details>
@@ -139,7 +157,7 @@ Matches the Flutter reports
   <p>Nothing in the repo history fixes this symptom. The closest is a Copilot-input focus fix (#5883, Aug 31), which is a different bug.
   Existing open reports of dead Assistant input boxes (LLM-20436) may share the same cause; worth checking once the log exists.</p></details>
 
-<h2>5. The upstream fix, and which Flutter has it</h2>
+<h2>6. The upstream fix, and which Flutter has it</h2>
 <table>
   <thead><tr><th>Flutter version</th><th>Channel</th><th>Has the fix?</th></tr></thead>
   <tbody>
@@ -151,25 +169,23 @@ Matches the Flutter reports
 <p class="note">Fix: <a href="https://github.com/flutter/flutter/pull/191529">flutter#191529</a> "prefer pointer events over semantics tap for mouse clicks on web",
 merged Nov 3, closed <a href="https://github.com/flutter/flutter/issues/188859">#188859</a>. Checked against merge commit <code>c664bdd</code>.</p>
 
-<h2>6. Recommendation</h2>
-<ol>
-  <li><b>Add a log for semantics (do first, small).</b> On web, log <code>SemanticsBinding.instance.semanticsEnabled</code> at startup and on every change, and set it as a Mixpanel super property
-      (<code>web_semantics_enabled</code>). Needs nothing from users.</li>
-  <li><b>Add a click log behind a flag.</b> A capture-phase browser listener records pointer down / up / click; Dart records what Flutter received. If the browser saw a mouse down and Flutter got nothing within 500 ms, log it with the target and the semantics state.
-      Also log browser, GPU renderer and number of open copies once per session.</li>
-  <li><b>Small app-side mitigation.</b> The visit row wraps its list item in a <code>MouseRegion</code> that rebuilds on hover (pin / hide buttons come and go).
-      With semantics on, that rebuilds the hidden accessibility element just as the click lands. Keep those buttons in the tree and only toggle visibility. (Hypothesis; safe either way.)</li>
-  <li><b>If the log shows semantics on for affected users:</b> plan the Flutter upgrade to 3.51 stable (a large jump from 3.47, QA on all platforms) and optionally ask Flutter for a cherry-pick into 3.50.x.</li>
-  <li><b>Avoid as a first step:</b> disabling semantics for everyone. It fixes clicks but breaks screen-reader support.</li>
-</ol>
-
-<h2>7. What if the log says...</h2>
-<div class="choice" id="choice">
-  <button data-k="on">Semantics is on</button>
-  <button data-k="off-lost">Semantics off, clicks lost</button>
-  <button data-k="off-slow">Semantics off, slow frames</button>
+<h2>7. Recommendation</h2>
+<div class="grid2">
+  <div class="card"><span class="pill p-good">Ship soon</span><b> Short-term workaround</b>
+    <p>Remove the hidden <code>flt-semantics-placeholder</code> element for flagged accounts, so nothing can switch semantics on. About 10 lines of JavaScript plus a per-account flag; we can release it ourselves.</p>
+    <p class="note">Cost: screen-reader support stops working for flagged accounts. Turn it on for the affected provider only. Local test: remove the element before clicking anything and check the semantics element count stays at 0. Not yet checked: that it fully protects a real session on the provider's machine.</p></div>
+  <div class="card"><span class="pill p-warn">Wait for release</span><b> Real fix: upgrade Flutter</b>
+    <p>Move to Flutter 3.51 stable, which includes flutter#191529 and fixes this for everyone. It is a big jump from 3.47 (QA on all four builds). Optionally ask Flutter for a cherry-pick into 3.50.x.</p>
+    <p class="note">No stable release has the fix today; the first one with it is the 3.51 beta.</p></div>
 </div>
-<div id="result" class="card"></div>
+<ol>
+  <li><b>Build the workaround</b> behind a per-account flag and turn it on for the affected provider.</li>
+  <li><b>Log whether semantics is on</b> (startup and every change, plus a Mixpanel property <code>web_semantics_enabled</code>). This shows who else is affected and whether the workaround helped. It needs nothing from users.</li>
+  <li><b>Open the Flutter upgrade ticket</b> for 3.51 stable.</li>
+  <li><b>Check other screens.</b> Confirm the date picker and other lists fail the same way. If so, the earlier idea of changing the visit row hover is not the answer and can be dropped.</li>
+  <li><b>Do not</b> disable semantics for everyone: it fixes clicks but breaks screen-reader support.</li>
+</ol>
+<p class="note">Still unknown: what switched semantics on for this provider (screen reader, dictation tool, browser extension?). The log above will not name it, only show that it happened.</p>
 
 <p class="note" style="margin-top:36px">Sources: Flutter issues
 <a href="https://github.com/flutter/flutter/issues/158530">#158530</a>,
@@ -184,12 +200,12 @@ Provider identity, site and account IDs are left out on purpose.</p>
 
 <script>
 const hyps = [
-  { name: "A. Semantics debouncer", tag: ["most likely", "p-warn"],
-    body: "Matches the symptom exactly: no ripple on a quick click, hold works, only some machines. Assistive or dictation software on a machine can switch semantics on by itself. <b>Not yet confirmed</b> for this provider. Test: log semantics state (recommendation 1)." },
-  { name: "B. Doxy.me competing for the GPU", tag: ["possible", "p-warn"],
-    body: "The provider said it got worse with the telehealth site open in the same browser. That site uses the camera, mic and video encoding. But slow frames would delay a click, not drop it with no ripple. Test: frame-timing log; ask whether it happens with Doxy.me fully closed." },
-  { name: "C. Our own rebuilds", tag: ["possible", "p-warn"],
-    body: "Rebuilding a row between mouse down and up cancels the tap. The hover rebuild in the visit row is the main suspect (recommendation 3). Test: click log comparing browser clicks with Flutter taps." },
+  { name: "A. Semantics click bug", tag: ["confirmed (reproduced)", "p-good"],
+    body: "Forcing semantics on in the browser console reproduces the symptom: quick clicks fail with no ripple, click-and-hold works. A known Flutter web bug, fixed upstream (flutter#191529) but not in a stable release yet. Still unknown: what switched semantics on for the provider." },
+  { name: "B. Doxy.me competing for the GPU", tag: ["not needed to explain it", "p-warn"],
+    body: "The provider said it got worse with the telehealth site open in the same browser. Slow frames would delay a click, not drop it with no ripple, so this does not explain the symptom. It could still be what switches semantics on (for example through a browser extension). Not checked." },
+  { name: "C. Our own rebuilds (visit row hover)", tag: ["not confirmed", "p-warn"],
+    body: "Guess that the hover rebuild in the visit row makes the dropped click worse. Not tested, and it would not cover the date picker. Drop it unless other screens show the bug is only on the visit row." },
   { name: "D. Missing worker feature in log", tag: ["unlikely", "p-good"],
     body: "<code>dedicatedWorkersInSharedWorkers</code> is not supported by Chrome or Edge at all, so every user logs it. It only changes how the local database stores data, not clicks." },
   { name: "E. Stale cached files / memory / tour overlay", tag: ["ruled out", "p-good"],
@@ -210,18 +226,6 @@ function select(n) {
   [...tabs.children].forEach((b,i) => b.setAttribute('aria-selected', i===n));
   [...panels.children].forEach((p,i) => p.hidden = i!==n);
 }
-
-const outcomes = {
-  "on": "Cause confirmed. The upstream fix exists (flutter#191529). Do the hover mitigation now, then plan the upgrade to Flutter 3.51 stable. Keep an eye on LLM-20436 (dead Assistant input), which may share this cause.",
-  "off-lost": "Something other than semantics is swallowing clicks. The click log shows the target element: if it is not the Flutter view, an element is lying on top of the app; if it is the Flutter view, look for our own gesture or rebuild conflict.",
-  "off-slow": "Resource contention. Recommend a separate browser or window for the telehealth site, and look at reducing our own background work. Consider a frame-timing log to quantify it."
-};
-const result = document.getElementById('result');
-result.textContent = "Pick a result above.";
-document.querySelectorAll('#choice button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('#choice button').forEach(x => x.setAttribute('aria-pressed', x===b));
-  result.textContent = outcomes[b.dataset.k];
-});
 
 // memory chart: [day, avg MB, peak MB], recording sessions only
 const mem = [["11-02",93,93],["11-03",118,198],["11-04",273,856],["11-05",103,183],["11-06",128,152],["11-09",99,148],

@@ -1,0 +1,545 @@
+---
+title: "AFEP-3052 Smart Update audio lost when the upload is cut off"
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AFEP-3052 — Smart Update audio is lost when the upload is cut off</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #ffffff; --ink: #1c2330; --muted: #5d6676; --line: #dfe3ea;
+    --accent: #3b5bdb; --accent-soft: #e7ecff;
+    --bad: #c92a2a; --bad-soft: #ffe8e8; --good: #2b8a3e; --good-soft: #e3f6e8;
+    --warn: #b5560a; --warn-soft: #fff1e0;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b2029; --ink: #e8ebf1; --muted: #9aa3b2; --line: #2d3442;
+      --accent: #8da2ff; --accent-soft: #232b4a;
+      --bad: #ff8787; --bad-soft: #3a2024; --good: #69db7c; --good-soft: #1d3324;
+      --warn: #ffb066; --warn-soft: #3a2a18;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 40px 24px 24px; max-width: 980px; margin: 0 auto; }
+  header .tag { display: inline-block; background: var(--accent-soft); color: var(--accent);
+    padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .03em; }
+  h1 { font-size: 28px; line-height: 1.25; margin: 12px 0 8px; }
+  header p { color: var(--muted); margin: 0; max-width: 760px; }
+  nav { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  nav ul { list-style: none; margin: 0 auto; padding: 8px 24px; max-width: 980px; display: flex; gap: 4px; flex-wrap: wrap; }
+  nav a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 13px; }
+  nav a:hover { background: var(--accent-soft); color: var(--accent); }
+  main { max-width: 980px; margin: 0 auto; padding: 0 24px 80px; }
+  section { margin-top: 44px; scroll-margin-top: 56px; }
+  h2 { font-size: 21px; margin: 0 0 4px; }
+  h2 .n { color: var(--accent); margin-right: 6px; }
+  .lead { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  code, .mono { font-family: var(--mono); font-size: 13px; }
+  code { background: var(--accent-soft); color: var(--accent); padding: 1px 6px; border-radius: 4px; }
+  pre { background: #10141c; color: #dbe2f0; padding: 14px 16px; border-radius: 10px; overflow-x: auto;
+    font: 13px/1.5 var(--mono); margin: 12px 0 0; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat b { font-size: 26px; display: block; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 4px; min-width: 120px; }
+  .bar i { display: block; height: 100%; background: var(--bad); }
+  button { font: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 6px 14px; border-radius: 8px; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 7px 18px; font-weight: 600; }
+  .seg button.on.asis { background: var(--bad-soft); color: var(--bad); }
+  .seg button.on.tobe { background: var(--good-soft); color: var(--good); }
+  /* timeline */
+  .tl-track { display: flex; gap: 6px; margin: 4px 0 16px; flex-wrap: wrap; }
+  .tl-dot { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 8px;
+    padding: 4px 10px; font: 12px var(--mono); }
+  .tl-dot.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tl-dot.done { color: var(--ink); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+  .col { border-radius: 10px; padding: 12px 14px; }
+  .col h4 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .col.asis { background: var(--bad-soft); } .col.asis h4 { color: var(--bad); }
+  .col.tobe { background: var(--good-soft); } .col.tobe h4 { color: var(--good); }
+  .col p { margin: 0; }
+  .tl-head { display: flex; align-items: baseline; gap: 12px; }
+  .tl-head .t { font: 700 20px var(--mono); }
+  .tl-ctl { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
+  .tl-ctl .sp { flex: 1; }
+  /* svg */
+  .diagram { overflow-x: auto; }
+  svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; fill: var(--ink); }
+  svg .lane { fill: var(--accent-soft); stroke: var(--line); }
+  svg .lane-t { font-weight: 700; font-size: 13px; text-anchor: middle; fill: var(--accent); }
+  svg .life { stroke: var(--line); stroke-dasharray: 4 4; }
+  svg .arrow { stroke: var(--ink); stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+  svg .arrow.ret { stroke-dasharray: 5 4; }
+  svg .arrow.bad { stroke: var(--bad); marker-end: url(#ahbad); }
+  svg .lbl { font-size: 12px; text-anchor: middle; }
+  svg .nb { fill: var(--bad-soft); stroke: var(--bad); }
+  svg .ng { fill: var(--good-soft); stroke: var(--good); }
+  svg .nw { fill: var(--warn-soft); stroke: var(--warn); }
+  svg .nt { font-size: 12px; }
+  svg .step { font: 700 11px var(--mono); fill: var(--muted); }
+  /* alternatives */
+  details.alt { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
+  details.alt summary { cursor: pointer; padding: 14px 18px; list-style: none; display: flex; gap: 10px; align-items: center; font-weight: 600; }
+  details.alt summary::-webkit-details-marker { display: none; }
+  details.alt summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+  details.alt[open] summary::before { transform: rotate(90deg); }
+  details.alt .body { padding: 0 18px 16px 36px; }
+  details.alt ul { margin: 6px 0 0; padding-left: 18px; }
+  .ok-line { color: var(--good); font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  ol.steps { margin: 6px 0 0; padding-left: 20px; }
+  ol.steps li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">AFEP-3052 · Q4 Frontend Reliability · on-call-fe</span>
+  <h1>Smart Update audio is lost when the upload is cut off</h1>
+  <p>Smart Update sends the whole recording in one request, with no saved record, no retry and no timeout. If iOS suspends the app mid-upload, the audio is gone and the provider is never told. This page covers the problem, the proposed solution, and the options we dropped.</p>
+</header>
+
+<nav>
+  <ul>
+    <li><a href="#problem">1 Problem</a></li>
+    <li><a href="#incident">2 Incident</a></li>
+    <li><a href="#flow">3 As-is vs to-be</a></li>
+    <li><a href="#solution">4 Solution</a></li>
+    <li><a href="#alternatives">5 Alternatives</a></li>
+    <li><a href="#scope">6 Scope &amp; open questions</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- 1 PROBLEM -->
+<section id="problem">
+  <h2><span class="n">1</span>Problem</h2>
+  <p class="lead">Smart Update (<code>/v1/scribe/workflows/regenerate</code>) is fire-once. A cut-off upload leaves nothing behind that says "this still needs sending".</p>
+
+  <div class="stats">
+    <div class="stat"><b>13,411</b><span>scribes opened Smart Update in the week (iOS 5,240 · web 7,383 · Android 429 · Chrome 359)</span></div>
+    <div class="stat"><b>370</b><span>opened it and never logged a submit or failure (2.8%). An upper bound, see below</span></div>
+    <div class="stat"><b>0</b><span>events logged when the upload is cut off, so we can't count it directly</span></div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Platform (2026-11-04 to 11-10)</th><th class="num">Opened</th><th class="num">Submitted</th><th class="num">Failed</th><th class="num">Opened, no outcome</th><th class="num">Rate</th><th>Rate bar</th></tr></thead>
+      <tbody>
+        <tr><td>Web app</td><td class="num">7,383</td><td class="num">7,137</td><td class="num">6</td><td class="num">245</td><td class="num">3.3%</td><td><div class="bar"><i style="width:33%"></i></div></td></tr>
+        <tr><td>iOS</td><td class="num">5,240</td><td class="num">5,134</td><td class="num">58</td><td class="num">100</td><td class="num">1.9%</td><td><div class="bar"><i style="width:19%"></i></div></td></tr>
+        <tr><td>Android</td><td class="num">429</td><td class="num">420</td><td class="num">1</td><td class="num">9</td><td class="num">2.1%</td><td><div class="bar"><i style="width:21%"></i></div></td></tr>
+        <tr><td>Chrome extension</td><td class="num">359</td><td class="num">343</td><td class="num">1</td><td class="num">16</td><td class="num">4.5%</td><td><div class="bar"><i style="width:45%"></i></div></td></tr>
+        <tr><td><b>Mobile (iOS + Android)</b></td><td class="num"><b>5,669</b></td><td class="num">5,554</td><td class="num">59</td><td class="num"><b>109</b></td><td class="num"><b>1.9%</b></td><td><div class="bar"><i style="width:19%"></i></div></td></tr>
+        <tr><td><b>Web + Chrome</b></td><td class="num"><b>7,742</b></td><td class="num">7,480</td><td class="num">7</td><td class="num"><b>261</b></td><td class="num"><b>3.4%</b></td><td><div class="bar"><i style="width:34%"></i></div></td></tr>
+        <tr><td><b>All</b></td><td class="num"><b>13,411</b></td><td class="num">13,034</td><td class="num">66</td><td class="num"><b>370</b></td><td class="num"><b>2.8%</b></td><td><div class="bar"><i style="width:28%"></i></div></td></tr>
+      </tbody>
+    </table>
+    <p class="note"><span class="pill warn">upper bound</span> "Opened, no outcome" includes people who opened the screen and left without recording, so it is not the number of lost uploads. Web tabs are not suspended like iOS apps, yet web's rate is the highest, which shows how much of this is people leaving. Bars are scaled so 10% fills the bar. Source: <code>scribe_events</code>, <code>tag = SMART_UPDATE</code>, grouped by <code>device_type</code>.</p>
+    <p class="note">Logged failures are higher on iOS: 58 <code>FAILED</code> events (1.1% of opens) against 6 on web (0.08%). That is a better sign of real upload trouble on mobile, but it only counts failures where the app was still running to log them.</p>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <b>What the code does today</b>
+    <table style="margin-top:8px">
+      <thead><tr><th>Gap</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>One multipart POST with the whole file</td><td class="mono">submit_regenerate_use_case.dart</td></tr>
+        <tr><td>No send timeout, so a stalled upload never fails visibly</td><td class="mono">scribe_repository.dart:207</td></tr>
+        <tr><td>No saved record of the pending update, so there is nothing to retry</td><td class="mono">smart_update_modal.dart:597, nursing_smart_update_screen.dart:549</td></tr>
+        <tr><td>Simple recorder has no recording uuid, so <code>APP_KILLED_DETECTED</code> never fires</td><td class="mono">simple_recorder_notifier.dart</td></tr>
+        <tr><td>No event on upload start, finish or cut-off</td><td class="mono">smart_update_tracking.dart</td></tr>
+      </tbody>
+    </table>
+    <p class="note">The audio file itself survives. The recorder writes to <code>Documents/scribe_audio/</code> and the modal deletes it only after a 200. What's missing is a record pointing at it.</p>
+  </div>
+</section>
+
+<!-- 2 INCIDENT -->
+<section id="incident">
+  <h2><span class="n">2</span>The incident, step by step</h2>
+  <p class="lead">One iOS provider on 2026-11-08 (UTC). Click through to see what happened today and what the fix changes.</p>
+  <div class="card">
+    <div class="tl-track" id="tlTrack"></div>
+    <div class="tl-head"><span class="t" id="tlTime"></span><b id="tlTitle"></b></div>
+    <div class="cols">
+      <div class="col asis"><h4>As-is</h4><p id="tlAsis"></p></div>
+      <div class="col tobe"><h4>With the fix</h4><p id="tlTobe"></p></div>
+    </div>
+    <div class="tl-ctl">
+      <button class="btn" id="tlPrev">← Back</button>
+      <button class="btn" id="tlNext">Next →</button>
+      <span class="sp"></span>
+      <span class="note" id="tlCount"></span>
+    </div>
+  </div>
+</section>
+
+<!-- 3 AS-IS vs TO-BE -->
+<section id="flow">
+  <h2><span class="n">3</span>As-is vs to-be</h2>
+  <p class="lead">Same submit tap, different outcome when the upload is cut off.</p>
+  <div class="seg" id="flowSeg" role="tablist">
+    <button class="on asis" data-v="asis">As-is</button>
+    <button data-v="tobe">To-be</button>
+  </div>
+
+  <div class="card diagram" style="margin-top:14px">
+    <!-- shared arrowheads (kept outside the toggled SVGs so they resolve in both) -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--ink)"/></marker>
+        <marker id="ahbad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--bad)"/></marker>
+      </defs>
+    </svg>
+    <!-- AS-IS -->
+    <svg id="svgAsis" viewBox="0 0 880 420" width="100%" role="img" aria-label="As-is sequence">
+      <rect class="lane" x="30" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="90" y="30">Provider</text>
+      <rect class="lane" x="240" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="300" y="30">App</text>
+      <rect class="lane" x="470" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="530" y="30">Phone storage</text>
+      <rect class="lane" x="700" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="760" y="30">Server</text>
+      <line class="life" x1="90" y1="40" x2="90" y2="410"/><line class="life" x1="300" y1="40" x2="300" y2="410"/>
+      <line class="life" x1="530" y1="40" x2="530" y2="410"/><line class="life" x1="760" y1="40" x2="760" y2="410"/>
+
+      <text class="step" x="8" y="84">1</text>
+      <line class="arrow" x1="92" y1="80" x2="298" y2="80"/><text class="lbl" x="195" y="73">tap submit</text>
+
+      <text class="step" x="8" y="134">2</text>
+      <line class="arrow" x1="302" y1="130" x2="758" y2="130"/><text class="lbl" x="530" y="123">POST /workflows/regenerate (whole file, no timeout)</text>
+      <text class="nt" x="540" y="148" style="fill:var(--muted)">audio file sits in scribe_audio/, nothing points at it</text>
+
+      <text class="step" x="8" y="194">3</text>
+      <rect class="nw" x="215" y="176" width="170" height="40" rx="8"/><text class="nt" x="300" y="193" text-anchor="middle">iOS suspends the app</text><text class="nt" x="300" y="208" text-anchor="middle">upload is mid-flight</text>
+
+      <text class="step" x="8" y="264">4</text>
+      <rect class="nb" x="640" y="246" width="240" height="40" rx="8"/><text class="nt" x="760" y="263" text-anchor="middle">499 after 6m34s</text><text class="nt" x="760" y="278" text-anchor="middle">body only partly received</text>
+
+      <text class="step" x="8" y="334">5</text>
+      <rect class="nb" x="195" y="316" width="210" height="52" rx="8"/>
+      <text class="nt" x="300" y="334" text-anchor="middle">no SUBMITTED, no FAILED,</text><text class="nt" x="300" y="349" text-anchor="middle">no error, no retry</text><text class="nt" x="300" y="362" text-anchor="middle">provider not told</text>
+      <line class="arrow bad" x1="300" y1="368" x2="300" y2="400" style="stroke-dasharray:4 3"/>
+      <text class="lbl" x="560" y="392" style="fill:var(--bad)">audio is lost for practical purposes</text>
+    </svg>
+
+    <!-- TO-BE -->
+    <svg id="svgTobe" viewBox="0 0 880 560" width="100%" role="img" aria-label="To-be sequence" style="display:none">
+      <rect class="lane" x="30" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="90" y="30">Provider</text>
+      <rect class="lane" x="240" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="300" y="30">App</text>
+      <rect class="lane" x="470" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="530" y="30">Phone storage</text>
+      <rect class="lane" x="700" y="10" width="120" height="30" rx="8"/><text class="lane-t" x="760" y="30">Server</text>
+      <line class="life" x1="90" y1="40" x2="90" y2="550"/><line class="life" x1="300" y1="40" x2="300" y2="550"/>
+      <line class="life" x1="530" y1="40" x2="530" y2="550"/><line class="life" x1="760" y1="40" x2="760" y2="550"/>
+
+      <text class="step" x="8" y="84">1</text>
+      <line class="arrow" x1="92" y1="80" x2="298" y2="80"/><text class="lbl" x="195" y="73">tap submit</text>
+
+      <text class="step" x="8" y="124">2</text>
+      <line class="arrow" x1="302" y1="120" x2="528" y2="120"/><text class="lbl" x="415" y="113">add pending entry to list</text>
+
+      <text class="step" x="8" y="164">3</text>
+      <rect class="ng" x="195" y="146" width="210" height="32" rx="8"/><text class="nt" x="300" y="166" text-anchor="middle">event: RECORDED, UPLOAD_STARTED</text>
+
+      <text class="step" x="8" y="214">4</text>
+      <line class="arrow" x1="302" y1="210" x2="758" y2="210"/><text class="lbl" x="530" y="203">POST /workflows/regenerate (with send timeout)</text>
+
+      <rect class="ng" x="60" y="236" width="360" height="22" rx="6" style="opacity:0"/>
+      <text class="nt" x="20" y="255" style="font-weight:700;fill:var(--good)">Happy path</text>
+      <text class="step" x="8" y="284">5</text>
+      <line class="arrow ret" x1="758" y1="280" x2="302" y2="280"/><text class="lbl" x="530" y="273">200 OK</text>
+      <text class="step" x="8" y="324">6</text>
+      <line class="arrow" x1="302" y1="320" x2="528" y2="320"/><text class="lbl" x="415" y="313">remove entry, delete audio</text>
+      <rect class="ng" x="195" y="336" width="210" height="28" rx="8"/><text class="nt" x="300" y="355" text-anchor="middle">event: UPLOAD_FINISHED</text>
+
+      <line x1="20" y1="386" x2="860" y2="386" style="stroke:var(--line)"/>
+      <text class="nt" x="20" y="408" style="font-weight:700;fill:var(--bad)">Cut off, timeout or app killed</text>
+
+      <text class="step" x="8" y="444">7</text>
+      <rect class="nw" x="470" y="426" width="120" height="36" rx="8"/><text class="nt" x="530" y="443" text-anchor="middle">entry + audio file</text><text class="nt" x="530" y="456" text-anchor="middle">still on the phone</text>
+      <rect class="nw" x="195" y="426" width="210" height="36" rx="8"/><text class="nt" x="300" y="443" text-anchor="middle">event: FAILED (error_type)</text><text class="nt" x="300" y="456" text-anchor="middle">or APP_KILLED_DETECTED</text>
+
+      <text class="step" x="8" y="490">8</text>
+      <line class="arrow ret" x1="528" y1="486" x2="302" y2="486"/><text class="lbl" x="415" y="479">next launch / resume: read list</text>
+      <text class="step" x="8" y="516">9</text>
+      <line class="arrow" x1="302" y1="512" x2="758" y2="512"/><text class="lbl" x="530" y="505">retry POST, up to N attempts (RETRY_ATTEMPT)</text>
+      <text class="step" x="8" y="542">10</text>
+      <line class="arrow" x1="298" y1="538" x2="92" y2="538"/><text class="lbl" x="195" y="531" style="font-size:11px">out of attempts: Try again / Dismiss</text>
+    </svg>
+    <p class="note" id="flowCaption">As-is: nothing records that the upload was started, so a cut-off leaves no trace and no recovery.</p>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <table>
+      <thead><tr><th>Question</th><th>As-is</th><th>To-be</th></tr></thead>
+      <tbody>
+        <tr><td>Is there a record of the pending update?</td><td><span class="pill bad">No</span></td><td><span class="pill good">Yes, list in SharedPreferences</span></td></tr>
+        <tr><td>Does a stalled upload fail visibly?</td><td><span class="pill bad">No timeout</span></td><td><span class="pill good">Send timeout, FAILED event</span></td></tr>
+        <tr><td>Is the audio resent?</td><td><span class="pill bad">Never</span></td><td><span class="pill good">Next launch / resume, up to N tries</span></td></tr>
+        <tr><td>Is the provider told?</td><td><span class="pill bad">No</span></td><td><span class="pill good">Try again / Dismiss prompt</span></td></tr>
+        <tr><td>Can we measure it?</td><td><span class="pill bad">Only by inference</span></td><td><span class="pill good">Upload and retry events</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 4 SOLUTION -->
+<section id="solution">
+  <h2><span class="n">4</span>Proposed solution</h2>
+  <p class="lead">Log what happens, make a stalled upload fail visibly, and keep a record of every pending upload so it can be resent.</p>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Part</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Events</b></td>
+          <td><code>SMART_UPDATE</code> events: <code>RECORDED</code> (length s, bytes), <code>UPLOAD_STARTED</code>, <code>UPLOAD_FINISHED</code> (duration ms, bytes); <code>error_type</code> on <code>FAILED</code>.</td>
+        </tr>
+        <tr>
+          <td><b>Send timeout</b></td>
+          <td><code>sendTimeout</code> on <code>regenerateWorkflow</code>, so a stalled upload fails instead of hanging.</td>
+        </tr>
+        <tr>
+          <td><b>Kill detection</b></td>
+          <td>The simple recorder registers its recording uuid so <code>APP_KILLED_DETECTED</code> covers Smart Update.</td>
+        </tr>
+        <tr>
+          <td><b>Pending list + retry</b><br><span class="note">iOS / Android audio only</span></td>
+          <td>Append an entry to a JSON list before the POST; remove it and delete the file on 200. On launch / resume, retry each entry one at a time, up to N attempts. Event: <code>RETRY_ATTEMPT</code>.</td>
+        </tr>
+        <tr>
+          <td><b>Tell the provider</b></td>
+          <td>When an entry runs out of attempts: Try again / Dismiss (Dismiss deletes the file). Events: <code>RETRY_EXHAUSTED</code>, <code>USER_NOTIFIED</code>, <code>USER_RETRY</code>, <code>USER_DISMISSED</code>.</td>
+        </tr>
+        <tr>
+          <td><b>Background retry</b><br><span class="pill warn">optional, later</span></td>
+          <td>Run the retry from the existing Workmanager job. Only worth it if the new events show uploads still sit unsent until the next app open.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note">No database migration and no generated code.</p>
+  </div>
+
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <b>Where it stores things</b>
+      <ol class="steps">
+        <li><b>Pending list:</b> one JSON value in SharedPreferences (<code>SharedPrefParams</code>), key <code>pending_smart_update_uploads</code>. Plain text is fine: it holds IDs, a section key and a file path, no patient data.</li>
+        <li><b>Audio:</b> stays where the recorder wrote it, <code>Documents/scribe_audio/</code>. The fix only stops it being deleted until success or Dismiss.</li>
+      </ol>
+      <p class="note">A list, not a single value, so a second failed update doesn't overwrite the first.</p>
+    </div>
+    <div class="card">
+      <b>Entry shape</b>
+<pre>[
+  {
+    "id": "&lt;recorder uuid&gt;",
+    "workflowId": 123,
+    "taskId": 456,
+    "sectionKey": "hpi",
+    "audioPath": ".../scribe_audio/&lt;uuid&gt;_opus.ogg",
+    "location": "ai_actions_menu",
+    "attempts": 1,
+    "createdAt": "2026-11-08T21:15:07Z"
+  }
+]</pre>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <b>Platform coverage</b>
+    <table style="margin-top:8px">
+      <thead><tr><th>Part</th><th>iOS</th><th>Android</th><th>Web / Chrome</th></tr></thead>
+      <tbody>
+        <tr><td>Events (recorded, upload started / finished, error type)</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td></tr>
+        <tr><td>Send timeout</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill warn">to verify in browser</span></td></tr>
+        <tr><td>Kill detection</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill bad">no</span></td></tr>
+        <tr><td>Pending list + retry + prompt</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill bad">no</span></td></tr>
+      </tbody>
+    </table>
+    <p class="note">Mobile is 42% of Smart Update opens (5,669 of 13,411); web and Chrome are 58%. On web the recording is held in memory as bytes, so there is no file to retry from. The events still ship on web, and an <code>UPLOAD_STARTED</code> with no <code>UPLOAD_FINISHED</code> will show how many web uploads are really cut off, as opposed to people leaving the screen. That decides whether web needs its own fix.</p>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <b>Rules</b>
+    <ul style="margin:6px 0 0;padding-left:18px">
+      <li>Remove an entry only after the server answers 200.</li>
+      <li>If the audio file is gone, drop the entry and log it.</li>
+      <li>No patient names or note text in events or in the pending list.</li>
+      <li>Text-only updates (typed context) are not saved; they are small and finish fast.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 5 ALTERNATIVES -->
+<section id="alternatives">
+  <h2><span class="n">5</span>Alternatives we dropped</h2>
+  <p class="lead">Click a card to see why.</p>
+
+  <details class="alt">
+    <summary>New drift table for pending uploads <span class="pill bad">dropped</span></summary>
+    <div class="body">
+      <p>A dedicated <code>PendingSmartUpdateTable</code> with a migration (schema 9 → 10).</p>
+      <ul>
+        <li>Needs the full migration ritual: schema bump, regenerated <code>.g.dart</code>, schema snapshot, stepwise migration, migration test.</li>
+        <li>Adds roughly 1.5k generated lines to the PR, which makes review harder.</li>
+        <li>A failed migration affects every existing install, for data that is a handful of IDs and a path.</li>
+      </ul>
+      <p class="note">Can revisit if the pending record ever needs PHI (e.g. saving typed context), which would need encrypted columns.</p>
+    </div>
+  </details>
+
+  <details class="alt">
+    <summary>Reuse <code>ScribeCacheTable</code> <span class="pill bad">dropped</span></summary>
+    <div class="body">
+      <p>Store the pending update as a row in the scribe cache.</p>
+      <ul>
+        <li>The chunk retry service and <code>cache_repository.dart</code> pick rows up by <code>state</code>, so a Smart Update row would be retried as a scribe.</li>
+        <li>The lost-scribe and stuck-in-cache metrics count these rows, so they would be skewed.</li>
+        <li>Avoiding that needs a type column and a filter in about 9 files.</li>
+        <li><code>templateIdsAsString</code> is non-null, so the row doesn't even fit.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="alt">
+    <summary>Reuse <code>FailedEventTable</code> <span class="pill bad">dropped</span></summary>
+    <div class="body">
+      <p>Park the pending update in the failed-events table.</p>
+      <ul>
+        <li><code>EventRetryService</code> would try to send the row as a scribe event.</li>
+        <li>The table has one text column (<code>eventData</code>); we'd overload it with a different meaning.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="alt" open>
+    <summary>Chosen: JSON list in SharedPreferences <span class="pill good">chosen</span></summary>
+    <div class="body">
+      <ul>
+        <li class="ok-line">No migration, no generated code.</li>
+        <li class="ok-line">No overlap with scribe cache metrics or the event retry path.</li>
+        <li class="ok-line">Content is IDs and a path only, so plaintext prefs are acceptable under the storage tiers in CLAUDE.md.</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<!-- 6 SCOPE -->
+<section id="scope">
+  <h2><span class="n">6</span>Out of scope &amp; open questions</h2>
+  <div class="grid2">
+    <div class="card">
+      <b>Out of scope</b>
+      <ul style="margin:6px 0 0;padding-left:18px">
+        <li><b>Resend on web / Chrome extension:</b> audio is in-memory bytes and doesn't survive a reload, so the pending list can't cover it. Needs a separate design (e.g. IndexedDB with encryption). Events and timeout still apply.</li>
+        <li><b>Re-eval branch</b> (<code>/workflow_task_re_eval</code>): same gap, not in the ticket. The pending entry can take a <code>branch</code> field later.</li>
+        <li><b>Keeping the upload alive in the iOS background:</b> would make cut-offs rarer but not recoverable; possible later add-on.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <b>Open questions</b>
+      <ul style="margin:6px 0 0;padding-left:18px">
+        <li>Web and Chrome are 58% of Smart Update opens. Do we wait for the new upload events to show how many web uploads are really cut off, or design a web fix now?</li>
+        <li>What should N (max attempts) be?</li>
+        <li>Do we build the background retry, or wait for data from the new events?</li>
+        <li>Should re-eval audio be included, or follow up later?</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note" style="margin-top:14px">Ticket: AFEP-3052 in Linear. Numbers are from <code>scribe_events</code> for 2026-11-04 to 11-10 and are an upper bound.</p>
+</section>
+
+</main>
+
+<script>
+(function () {
+  // ---- Timeline ----
+  var steps = [
+    { t: "21:03:24", title: "Smart Update opened",
+      asis: "App logs OPENED and polls the server normally until 21:12.",
+      tobe: "Same. Nothing changes before submit." },
+    { t: "21:15:07", title: "Provider taps submit (about 11 min of audio)",
+      asis: "The request starts. In the same second the app goes to the background. Nothing is saved that says an upload is pending.",
+      tobe: "Before the POST, an entry is added to the pending list. RECORDED (length, bytes) and UPLOAD_STARTED are logged. The POST has a send timeout." },
+    { t: "21:17", title: "5-minute check-in is missing",
+      asis: "iOS has suspended the app. The check-in stops. The simple recorder has no recording uuid, so no kill is detected.",
+      tobe: "Same suspension, but the recorder's uuid is registered, so APP_KILLED_DETECTED can fire on the next launch." },
+    { t: "21:21:41", title: "Server gives up: HTTP 499",
+      asis: "The server logs \"client disconnected while reading the request body\" after 6 min 34 s. Audio only partly received.",
+      tobe: "Same on the server. The difference is on the phone: the entry and the audio file are still there." },
+    { t: "23:15", title: "App starts fresh",
+      asis: "No SUBMITTED, no FAILED, no error, no retry. The provider isn't told and the audio is not resent.",
+      tobe: "App reads the pending list and retries. On 200: UPLOAD_FINISHED, entry removed, file deleted. After N failures: RETRY_EXHAUSTED and a Try again / Dismiss prompt." }
+  ];
+  var i = 0;
+  var $ = function (id) { return document.getElementById(id); };
+  function renderTl() {
+    var s = steps[i];
+    $("tlTime").textContent = s.t;
+    $("tlTitle").textContent = s.title;
+    $("tlAsis").textContent = s.asis;
+    $("tlTobe").textContent = s.tobe;
+    $("tlCount").textContent = "Step " + (i + 1) + " of " + steps.length;
+    $("tlPrev").disabled = i === 0;
+    $("tlNext").disabled = i === steps.length - 1;
+    var track = $("tlTrack");
+    track.innerHTML = "";
+    steps.forEach(function (st, k) {
+      var b = document.createElement("button");
+      b.className = "tl-dot" + (k === i ? " on" : (k < i ? " done" : ""));
+      b.textContent = st.t;
+      b.addEventListener("click", function () { i = k; renderTl(); });
+      track.appendChild(b);
+    });
+  }
+  $("tlPrev").addEventListener("click", function () { if (i > 0) { i--; renderTl(); } });
+  $("tlNext").addEventListener("click", function () { if (i < steps.length - 1) { i++; renderTl(); } });
+  renderTl();
+
+  // ---- As-is / to-be toggle ----
+  var captions = {
+    asis: "As-is: nothing records that the upload was started, so a cut-off leaves no trace and no recovery.",
+    tobe: "To-be: a pending entry exists until the server answers 200, so a cut-off is retried and, if it keeps failing, shown to the provider."
+  };
+  var seg = $("flowSeg");
+  seg.addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    var v = b.getAttribute("data-v");
+    Array.prototype.forEach.call(seg.children, function (c) {
+      c.className = c === b ? "on " + v : "";
+    });
+    $("svgAsis").style.display = v === "asis" ? "" : "none";
+    $("svgTobe").style.display = v === "tobe" ? "" : "none";
+    $("flowCaption").textContent = captions[v];
+  });
+})();
+</script>
+</body>
+</html>

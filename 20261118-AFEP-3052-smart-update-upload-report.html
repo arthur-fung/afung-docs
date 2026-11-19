@@ -173,8 +173,8 @@ layout: null
         <tr><td>One multipart POST with the whole file</td><td class="mono">submit_regenerate_use_case.dart</td></tr>
         <tr><td>No send timeout, so a stalled upload never fails visibly</td><td class="mono">scribe_repository.dart:207</td></tr>
         <tr><td>No saved record of the pending update, so there is nothing to retry</td><td class="mono">smart_update_modal.dart:597, nursing_smart_update_screen.dart:549</td></tr>
-        <tr><td>Simple recorder has no recording uuid, so <code>APP_KILLED_DETECTED</code> never fires</td><td class="mono">simple_recorder_notifier.dart</td></tr>
-        <tr><td>No event on upload start, finish or cut-off</td><td class="mono">smart_update_tracking.dart</td></tr>
+        <tr><td><code>APP_KILLED_DETECTED</code> only fires when the app dies <em>while recording</em>, not during the upload</td><td class="mono">app_lifecycle_provider.dart:341</td></tr>
+        <tr><td>No event on upload start, no error type on failures</td><td class="mono">smart_update_tracking.dart</td></tr>
       </tbody>
     </table>
     <p class="note">The audio file itself survives. The recorder writes to <code>Documents/scribe_audio/</code> and the modal deletes it only after a 200. What's missing is a record pointing at it.</p>
@@ -263,7 +263,7 @@ layout: null
       <line class="arrow" x1="302" y1="120" x2="528" y2="120"/><text class="lbl" x="415" y="113">add pending entry to list</text>
 
       <text class="step" x="8" y="164">3</text>
-      <rect class="ng" x="195" y="146" width="210" height="32" rx="8"/><text class="nt" x="300" y="166" text-anchor="middle">event: RECORDED, UPLOAD_STARTED</text>
+      <rect class="ng" x="195" y="146" width="210" height="32" rx="8"/><text class="nt" x="300" y="166" text-anchor="middle">event: UPLOAD_STARTED (saved locally first)</text>
 
       <text class="step" x="8" y="214">4</text>
       <line class="arrow" x1="302" y1="210" x2="758" y2="210"/><text class="lbl" x="530" y="203">POST /workflows/regenerate (with send timeout)</text>
@@ -274,14 +274,14 @@ layout: null
       <line class="arrow ret" x1="758" y1="280" x2="302" y2="280"/><text class="lbl" x="530" y="273">200 OK</text>
       <text class="step" x="8" y="324">6</text>
       <line class="arrow" x1="302" y1="320" x2="528" y2="320"/><text class="lbl" x="415" y="313">remove entry, delete audio</text>
-      <rect class="ng" x="195" y="336" width="210" height="28" rx="8"/><text class="nt" x="300" y="355" text-anchor="middle">event: UPLOAD_FINISHED</text>
+      <rect class="ng" x="195" y="336" width="210" height="28" rx="8"/><text class="nt" x="300" y="355" text-anchor="middle">event: SUBMITTED (same upload_id)</text>
 
       <line x1="20" y1="386" x2="860" y2="386" style="stroke:var(--line)"/>
       <text class="nt" x="20" y="408" style="font-weight:700;fill:var(--bad)">Cut off, timeout or app killed</text>
 
       <text class="step" x="8" y="444">7</text>
       <rect class="nw" x="470" y="426" width="120" height="36" rx="8"/><text class="nt" x="530" y="443" text-anchor="middle">entry + audio file</text><text class="nt" x="530" y="456" text-anchor="middle">still on the phone</text>
-      <rect class="nw" x="195" y="426" width="210" height="36" rx="8"/><text class="nt" x="300" y="443" text-anchor="middle">event: FAILED (error_type)</text><text class="nt" x="300" y="456" text-anchor="middle">or APP_KILLED_DETECTED</text>
+      <rect class="nw" x="195" y="426" width="210" height="36" rx="8"/><text class="nt" x="300" y="443" text-anchor="middle">FAILED (error_type), or no event</text><text class="nt" x="300" y="456" text-anchor="middle">if the app died: start, no outcome</text>
 
       <text class="step" x="8" y="490">8</text>
       <line class="arrow ret" x1="528" y1="486" x2="302" y2="486"/><text class="lbl" x="415" y="479">next launch / resume: read list</text>
@@ -318,19 +318,15 @@ layout: null
       <tbody>
         <tr>
           <td><b>Events</b></td>
-          <td><code>SMART_UPDATE</code> events: <code>RECORDED</code> (length s, bytes), <code>UPLOAD_STARTED</code>, <code>UPLOAD_FINISHED</code> (duration ms, bytes); <code>error_type</code> on <code>FAILED</code>.</td>
+          <td><code>UPLOAD_STARTED</code> (upload id, file size, recording length), saved on the phone first so it survives the app dying right then. <code>upload_id</code>, <code>upload_duration_ms</code> and <code>file_size_bytes</code> on the existing <code>SUBMITTED</code> / <code>FAILED</code> / <code>RATE_LIMITED</code>. <code>error_type</code> on <code>FAILED</code>. A cut-off upload is an <code>UPLOAD_STARTED</code> with no outcome for the same <code>upload_id</code>.</td>
         </tr>
         <tr>
           <td><b>Send timeout</b></td>
           <td><code>sendTimeout</code> on <code>regenerateWorkflow</code>, so a stalled upload fails instead of hanging.</td>
         </tr>
         <tr>
-          <td><b>Kill detection</b></td>
-          <td>The simple recorder registers its recording uuid so <code>APP_KILLED_DETECTED</code> covers Smart Update.</td>
-        </tr>
-        <tr>
           <td><b>Pending list + retry</b><br><span class="note">iOS / Android audio only</span></td>
-          <td>Append an entry to a JSON list before the POST; remove it and delete the file on 200. On launch / resume, retry each entry one at a time, up to N attempts. Event: <code>RETRY_ATTEMPT</code>.</td>
+          <td>Append an entry (with the user id) to a JSON list before the POST; remove it and delete the file on 200. On launch / resume, retry each entry one at a time, up to N attempts. Event: <code>RETRY_ATTEMPT</code>. The list survives logout, only the recording user is retried or prompted, and entries older than 7 days are dropped with their audio.</td>
         </tr>
         <tr>
           <td><b>Tell the provider</b></td>
@@ -376,13 +372,12 @@ layout: null
     <table style="margin-top:8px">
       <thead><tr><th>Part</th><th>iOS</th><th>Android</th><th>Web / Chrome</th></tr></thead>
       <tbody>
-        <tr><td>Events (recorded, upload started / finished, error type)</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td></tr>
+        <tr><td>Events (<code>UPLOAD_STARTED</code>, upload fields on outcomes, error type)</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td></tr>
         <tr><td>Send timeout</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill warn">to verify in browser</span></td></tr>
-        <tr><td>Kill detection</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill bad">no</span></td></tr>
         <tr><td>Pending list + retry + prompt</td><td><span class="pill good">yes</span></td><td><span class="pill good">yes</span></td><td><span class="pill bad">no</span></td></tr>
       </tbody>
     </table>
-    <p class="note">Mobile is 42% of Smart Update opens (5,669 of 13,411); web and Chrome are 58%. On web the recording is held in memory as bytes, so there is no file to retry from. The events still ship on web, and an <code>UPLOAD_STARTED</code> with no <code>UPLOAD_FINISHED</code> will show how many web uploads are really cut off, as opposed to people leaving the screen. That decides whether web needs its own fix.</p>
+    <p class="note">Mobile is 42% of Smart Update opens (5,669 of 13,411); web and Chrome are 58%. On web the recording is held in memory as bytes, so there is no file to retry from. The events still ship on web, and an <code>UPLOAD_STARTED</code> with no outcome event will show how many web uploads are really cut off, as opposed to people leaving the screen. That decides whether web needs its own fix.</p>
   </div>
 
   <div class="card" style="margin-top:14px">
@@ -486,16 +481,16 @@ layout: null
       tobe: "Same. Nothing changes before submit." },
     { t: "21:15:07", title: "Provider taps submit (about 11 min of audio)",
       asis: "The request starts. In the same second the app goes to the background. Nothing is saved that says an upload is pending.",
-      tobe: "Before the POST, an entry is added to the pending list. RECORDED (length, bytes) and UPLOAD_STARTED are logged. The POST has a send timeout." },
+      tobe: "Before the POST, an entry is added to the pending list and UPLOAD_STARTED (size, length) is saved locally. The POST has a send timeout." },
     { t: "21:17", title: "5-minute check-in is missing",
-      asis: "iOS has suspended the app. The check-in stops. The simple recorder has no recording uuid, so no kill is detected.",
-      tobe: "Same suspension, but the recorder's uuid is registered, so APP_KILLED_DETECTED can fire on the next launch." },
+      asis: "iOS has suspended the app. The check-in stops. No kill is detected: that only fires if the app dies while recording, and the recording had already stopped.",
+      tobe: "Same suspension. UPLOAD_STARTED is already saved on the phone, so it is sent on the next launch with no outcome for that upload id: a counted cut-off." },
     { t: "21:21:41", title: "Server gives up: HTTP 499",
       asis: "The server logs \"client disconnected while reading the request body\" after 6 min 34 s. Audio only partly received.",
       tobe: "Same on the server. The difference is on the phone: the entry and the audio file are still there." },
     { t: "23:15", title: "App starts fresh",
       asis: "No SUBMITTED, no FAILED, no error, no retry. The provider isn't told and the audio is not resent.",
-      tobe: "App reads the pending list and retries. On 200: UPLOAD_FINISHED, entry removed, file deleted. After N failures: RETRY_EXHAUSTED and a Try again / Dismiss prompt." }
+      tobe: "App reads the pending list and retries. On 200: SUBMITTED, entry removed, file deleted. After N failures: RETRY_EXHAUSTED and a Try again / Dismiss prompt." }
   ];
   var i = 0;
   var $ = function (id) { return document.getElementById(id); };
